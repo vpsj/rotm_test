@@ -15,7 +15,11 @@
       margin: auto;
     }
 
-    h1, p, h2 {
+    h1, p {
+      text-align: center;
+    }
+
+    h2, p {
       text-align: center;
     }
 
@@ -31,12 +35,6 @@
       border-radius: 8px;
       padding: 10px;
       box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-    }
-
-    .upvote-info {
-      margin-top: 8px;
-      font-size: 14px;
-      color: #ccc;
     }
 
     #rankingSection {
@@ -96,33 +94,39 @@
 
     #hiddenGoogleForm {
       display: none;
-    }
-
+    } 
     .judge-criteria {
-      max-width: 600px;
-      margin-left: auto;
-      margin-right: auto;
-    }
+    /* Set a max-width for the container, so it's not full-width */
+    max-width: 600px; /* Adjust this value to control the list width */
+    /* Center the container itself */
+    margin-left: auto;
+    margin-right: auto;
+}
 
-    .judge-criteria ul {
-      padding-left: 100px;
-      text-align: left;
-      list-style-position: inside;
-    }
+.judge-criteria ul {
+    /* Remove any default browser padding that pushes the list left */
+    padding-left: 100px;
+    
+    /* Ensure the list is left-aligned within its centered container */
+    text-align: left;
+    list-style-position: inside; /* Puts the bullet point inside the list item text flow */
+}
+  
+
   </style>
 </head>
 <body>
   <h1>Vote for Your Top 3 Favorite Videos</h1>
   <p>Watch the videos below, then drag the titles to rank your top 3.</p>
 
-  <h2>Judge the videos based on the following criterion:</h2>
+  <h2> Judge the videos based on the following criteria:</h2>
   <div class="judge-criteria">
     <ul>
-      <li>The video quality and cinematography of the clip</li>
-      <li>Authentic track sound over low-effort background music</li>
-      <li>Title of the video, how descriptive and informative it is</li>
+        <li>The video quality and cinematography of the clip</li>
+        <li>Authentic track sound over low-effort background music</li>
+        <li>Title of the video, how descriptive and informative it is</li>
     </ul>
-  </div>
+</div>
 
   <div class="video-grid" id="videoGrid"></div>
 
@@ -146,65 +150,78 @@
 
   <script>
     const posts = [
-      { id: "video1", url: "https://www.reddit.com/r/indianrailways/comments/1mh6ob2/" },
-      { id: "video2", url: "https://www.reddit.com/r/indianrailways/comments/1mxvg71/" },
-      { id: "video3", url: "https://www.reddit.com/r/indianrailways/comments/1mgaxxq/" },
-      { id: "video4", url: "https://www.reddit.com/r/indianrailways/comments/1n2j4sm/" },
-      { id: "video5", url: "https://www.reddit.com/r/indianrailways/comments/1muhnsw/" },
-      { id: "video6", url: "https://www.reddit.com/r/indianrailways/comments/1mtr2c3/" },
-      { id: "video7", url: "https://www.reddit.com/r/indianrailways/comments/1mq10zj/" },
-      { id: "video8", url: "https://www.reddit.com/r/indianrailways/comments/1mh3v0u/" },
-      { id: "video9", url: "https://www.reddit.com/r/indianrailways/comments/1mfnxqk/" },
+      {
+        id: "video1",
+        url: "https://www.reddit.com/r/indianrailways/comments/1mh6ob2/speedy_parallel_race_between_two_superfast_trains/",
+      },
+      {
+        id: "video2",
+        url: "https://www.reddit.com/r/indianrailways/comments/1mxvg71/what_about_this_guys/",
+      },
+      {
+        id: "video3",
+        url: "https://www.reddit.com/r/indianrailways/comments/1mgaxxq/look_guys_a_beautiful_view_of_jaipur_vande_bharat/",
+      },
+      {
+        id: "video4",
+        url: "https://www.reddit.com/r/indianrailways/comments/1n2j4sm/headphones_recommended/",
+      },
+      {
+        id: "video5",
+        url: "https://www.reddit.com/r/indianrailways/comments/1muhnsw/a_soulful_journey_through_the_monsoondrenched/",
+      },
+	  {
+		id: "video6",
+		url: "https://www.reddit.com/r/indianrailways/comments/1mtr2c3/vande_bharat_passing_by/",
+	  },
+	  {
+		id: "video7",
+		url: "https://www.reddit.com/r/indianrailways/comments/1mq10zj/rameshwaram_tamil_nadu/",
+	  },
+	  {
+		id: "video8",
+		url: "https://www.reddit.com/r/indianrailways/comments/1mh3v0u/siddaganga_express_pulling_into_davangere/",
+	  },
+	  {
+		id: "video9",
+		url: "https://www.reddit.com/r/indianrailways/comments/1mfnxqk/guess_the_plwce/",
+	  },
     ];
 
     const videoGrid = document.getElementById("videoGrid");
     const rankingList = document.getElementById("rankingList");
 
     async function loadVideos() {
-      let allPosts = [];
+      const embedPromises = [];
 
       for (const post of posts) {
-        try {
-          const res = await fetch(post.url + ".json", { headers: { "User-Agent": "Mozilla/5.0" } });
-          const json = await res.json();
-          const data = json[0].data.children[0].data;
-          const title = data.title;
-          const upvotes = data.ups;
-
-          allPosts.push({ id: post.id, url: post.url, title, upvotes });
-        } catch (err) {
-          console.error("Failed to fetch:", post.url, err);
-        }
-      }
-
-      // Sort by upvotes ascending
-      allPosts.sort((a, b) => a.upvotes - b.upvotes);
-
-      // Assign scores: 10,20,30,... (lowest → 10)
-      allPosts.forEach((p, i) => {
-        p.redditScore = (i + 1) * 10;
-      });
-
-      // Display in video grid
-      allPosts.forEach((p) => {
         const embedHTML = `
           <div class="video-card">
-            <blockquote class="reddit-card"><a href="${p.url}">${p.title}</a></blockquote>
-            <div class="upvote-info">⬆️ ${p.upvotes} upvotes | Reddit Score: ${p.redditScore}</div>
+            <blockquote class="reddit-card">
+              <a href="${post.url}">Loading title...</a>
+            </blockquote>
           </div>
         `;
         videoGrid.insertAdjacentHTML("beforeend", embedHTML);
 
-        const li = document.createElement("li");
-        li.textContent = p.title;
-        li.setAttribute("data-id", p.id);
-        rankingList.appendChild(li);
-      });
+        const fetchPromise = fetch(post.url + ".json")
+          .then((res) => res.json())
+          .then((json) => {
+            const title = json[0].data.children[0].data.title;
+            const li = document.createElement("li");
+            li.textContent = title;
+            li.setAttribute("data-id", post.id);
+            rankingList.appendChild(li);
+          })
+          .catch((err) => console.error("Title fetch failed:", post.url, err));
 
-      // Activate Reddit embed
+        embedPromises.push(fetchPromise);
+      }
+
+      await Promise.all(embedPromises);
+
       window.__REDDIT_EMBED__?.onDOMContentLoaded?.();
 
-      // Make sortable
       Sortable.create(rankingList, {
         animation: 150,
         onEnd: updateTop3Styling,
@@ -218,6 +235,7 @@
       items.forEach((li, i) => {
         li.classList.remove("top1", "top2", "top3");
         const plainText = li.textContent.replace(/^\d+\.\s*/, "");
+
         if (i === 0) {
           li.classList.add("top1");
           li.textContent = `1. ${plainText}`;
@@ -251,3 +269,8 @@
   </script>
 </body>
 </html>
+
+
+
+
+
