@@ -1,152 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Vote for Your Top 3 Favorite Videos</title>
-
-  <script async src="https://embed.redditmedia.com/widgets/platform.js" charset="UTF-8"></script>
-  <style>
-    body { font-family: Arial; background: #111; color: #fff; padding: 20px; max-width: 1200px; margin: auto; }
-    h1, h2, p { text-align: center; }
-    .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; margin-bottom: 40px; }
-    .video-card { background: #222; border-radius: 8px; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-    #rankingSection { background: #222; padding: 20px; border-radius: 10px; }
-    #rankingList { list-style: none; padding: 0; margin-top: 20px; }
-    #rankingList li { padding: 10px 15px; margin: 10px 0; background: #333; border: 1px solid #555; border-radius: 5px; cursor: grab; transition: background 0.3s; }
-    #rankingList li.top1 { background: #d4af37; color: #111; font-weight: bold; }
-    #rankingList li.top2 { background: #c0c0c0; color: #111; font-weight: bold; }
-    #rankingList li.top3 { background: #cd7f32; color: #111; font-weight: bold; }
-    #submitBtn { margin-top: 20px; padding: 10px 20px; font-size: 16px; display: block; margin-left:auto; margin-right:auto; }
-    #responseMsg { text-align: center; font-weight: bold; margin-top: 20px; }
-    #hiddenGoogleForm { display: none; }
-    .judge-criteria { max-width: 600px; margin-left:auto; margin-right:auto; }
-    .judge-criteria ul { padding-left: 100px; text-align:left; list-style-position: inside; }
-  </style>
+<meta charset="UTF-8" />
+<title>Vote for Your Top 3 Favorite Videos</title>
+<script async src="https://embed.redditmedia.com/widgets/platform.js" charset="UTF-8"></script>
+<style>
+  body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
+  h1,h2,p { text-align:center; }
+  .video-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px,1fr)); gap:20px; margin-bottom:40px; }
+  .video-card { background:#222; border-radius:8px; padding:10px; box-shadow:0 2px 5px rgba(0,0,0,0.3);}
+  #rankingSection { background:#222; padding:20px; border-radius:10px; }
+  #rankingList { list-style:none; padding:0; margin-top:20px; }
+  #rankingList li { padding:10px 15px; margin:10px 0; background:#333; border:1px solid #555; border-radius:5px; cursor:grab; transition:background 0.3s; }
+  #rankingList li.top1 { background:#d4af37; color:#111; font-weight:bold; }
+  #rankingList li.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
+  #rankingList li.top3 { background:#cd7f32; color:#111; font-weight:bold; }
+  #submitBtn { margin-top:20px; padding:10px 20px; font-size:16px; display:block; margin:auto; }
+  #responseMsg { text-align:center; font-weight:bold; margin-top:20px; }
+  #hiddenGoogleForm { display:none; }
+  .judge-criteria { max-width:600px; margin:auto; }
+  .judge-criteria ul { padding-left:100px; text-align:left; list-style-position:inside; }
+</style>
 </head>
 <body>
+<h1>Vote for Your Top 3 Favorite Videos</h1>
+<p>Watch the videos below, then drag the titles to rank your top 3.</p>
 
-  <h1>Vote for Your Top 3 Favorite Videos</h1>
-  <p>Watch the videos below, then drag the titles to rank your top 3.</p>
+<h2>Judge the videos based on the following criteria:</h2>
+<div class="judge-criteria">
+  <ul>
+    <li>The video quality and cinematography of the clip</li>
+    <li>Authentic track sound over low-effort background music</li>
+    <li>Title of the video, how descriptive and informative it is</li>
+  </ul>
+</div>
 
-  <h2>Judge the videos based on the following criteria:</h2>
-  <div class="judge-criteria">
-    <ul>
-      <li>The video quality and cinematography of the clip</li>
-      <li>Authentic track sound over low-effort background music</li>
-      <li>Title of the video, how descriptive and informative it is</li>
-    </ul>
-  </div>
+<div class="video-grid" id="videoGrid"></div>
+<div id="rankingSection">
+  <h2>Drag to Rank Top 3</h2>
+  <ul id="rankingList"></ul>
+  <button id="submitBtn">Submit Vote</button>
+  <p id="responseMsg"></p>
+</div>
 
-  <div class="video-grid" id="videoGrid"></div>
+<!-- Hidden Google Form -->
+<form id="hiddenGoogleForm" action="https://docs.google.com/forms/d/FORM_ID/formResponse" method="POST" target="hiddenIframe">
+  <input type="text" name="entry.1" id="field1" />
+  <input type="text" name="entry.2" id="field2" />
+  <input type="text" name="entry.3" id="field3" />
+  <input type="submit" />
+</form>
+<iframe name="hiddenIframe" style="display:none;"></iframe>
 
-  <div id="rankingSection">
-    <h2>Drag to Rank Top 3</h2>
-    <ul id="rankingList"></ul>
-    <button id="submitBtn">Submit Vote</button>
-    <p id="responseMsg"></p>
-  </div>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+let posts = [];
+const videoGrid = document.getElementById("videoGrid");
+const rankingList = document.getElementById("rankingList");
+window.redditUpvotes = {}; // store upvotes
 
-  <!-- Hidden Google Form -->
-  <form id="hiddenGoogleForm" action="https://docs.google.com/forms/d/1wUIPXtUV5HqQtNMwfj5D4Kk0MGMsQRMvOnWLfOD8aIA/formResponse" method="POST" target="hiddenIframe">
-    <input type="text" name="entry.840683232" id="field1" />
-    <input type="text" name="entry.1808098160" id="field2" />
-    <input type="text" name="entry.1134855181" id="field3" />
-    <input type="submit" />
-  </form>
-  <iframe name="hiddenIframe" style="display: none;"></iframe>
+// Fetch links.json from GitHub
+async function loadPosts() {
+  const res = await fetch("https://raw.githubusercontent.com/vpsj/rotm_test/main/links.json");
+  const urls = await res.json();
+  posts = urls.map((url, i)=>({id:"video"+(i+1), url}));
 
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  const embedPromises = [];
 
-  <script>
-    // List of Reddit posts
-    const posts = [
-      { id:"video1", url:"https://www.reddit.com/r/indianrailways/comments/1mh6ob2/speedy_parallel_race_between_two_superfast_trains/" },
-      { id:"video2", url:"https://www.reddit.com/r/indianrailways/comments/1mxvg71/what_about_this_guys/" },
-      { id:"video3", url:"https://www.reddit.com/r/indianrailways/comments/1mgaxxq/look_guys_a_beautiful_view_of_jaipur_vande_bharat/" },
-      { id:"video4", url:"https://www.reddit.com/r/indianrailways/comments/1n2j4sm/headphones_recommended/" },
-      { id:"video5", url:"https://www.reddit.com/r/indianrailways/comments/1muhnsw/a_soulful_journey_through_the_monsoondrenched/" },
-      { id:"video6", url:"https://www.reddit.com/r/indianrailways/comments/1mtr2c3/vande_bharat_passing_by/" },
-      { id:"video7", url:"https://www.reddit.com/r/indianrailways/comments/1mq10zj/rameshwaram_tamil_nadu/" },
-      { id:"video8", url:"https://www.reddit.com/r/indianrailways/comments/1mh3v0u/siddaganga_express_pulling_into_davangere/" },
-      { id:"video9", url:"https://www.reddit.com/r/indianrailways/comments/1mfnxqk/guess_the_plwce/" }
-    ];
+  for (const post of posts){
+    // Reddit embed card
+    const cardHTML = `<div class="video-card"><blockquote class="reddit-card"><a href="${post.url}">Loading title...</a></blockquote></div>`;
+    videoGrid.insertAdjacentHTML("beforeend", cardHTML);
 
-    // Global objects to store titles and upvotes
-    window.redditUpvotes = {};
-    window.redditTitles = {};
-
-    async function fetchRedditData() {
-      const fetchPromises = posts.map(async post => {
-        try {
-          const res = await fetch(post.url + ".json");
-          const json = await res.json();
-          const postData = json[0].data.children[0].data;
-          window.redditUpvotes[post.url] = postData.ups || 0;
-          window.redditTitles[post.url] = postData.title || post.url;
-        } catch(err) {
-          console.error("Failed fetching Reddit data for:", post.url, err);
-          window.redditUpvotes[post.url] = 10;
-          window.redditTitles[post.url] = post.url;
-        }
-      });
-      await Promise.all(fetchPromises);
-      console.log("Reddit data ready:", window.redditTitles, window.redditUpvotes);
-    }
-
-    const videoGrid = document.getElementById("videoGrid");
-    const rankingList = document.getElementById("rankingList");
-
-    async function loadVideos() {
-      await fetchRedditData();
-
-      posts.forEach(post => {
-        const title = window.redditTitles[post.url];
-        const embedHTML = `
-          <div class="video-card">
-            <blockquote class="reddit-card">
-              <a href="${post.url}">${title}</a>
-            </blockquote>
-          </div>
-        `;
-        videoGrid.insertAdjacentHTML("beforeend", embedHTML);
+    const fetchPromise = fetch(post.url+".json")
+      .then(res=>res.json())
+      .then(json=>{
+        const data = json[0].data.children[0].data;
+        const title = data.title || post.url;
+        const upvotes = data.ups || 10;
+        window.redditUpvotes[post.url] = upvotes;
 
         const li = document.createElement("li");
         li.textContent = title;
-        li.dataset.id = post.id;
+        li.setAttribute("data-id", post.id);
         rankingList.appendChild(li);
-      });
+      })
+      .catch(err=>{console.error("Failed to fetch:", post.url, err); window.redditUpvotes[post.url]=10; });
+    
+    embedPromises.push(fetchPromise);
+  }
 
-      window.__REDDIT_EMBED__?.onDOMContentLoaded?.();
+  await Promise.all(embedPromises);
+  window.__REDDIT_EMBED__?.onDOMContentLoaded?.();
 
-      Sortable.create(rankingList, {
-        animation: 150,
-        onEnd: updateTop3Styling
-      });
-      updateTop3Styling();
-    }
+  Sortable.create(rankingList, { animation:150, onEnd:updateTop3Styling });
+  updateTop3Styling();
+}
 
-    function updateTop3Styling() {
-      const items = [...rankingList.children];
-      items.forEach((li,i)=>{
-        li.classList.remove("top1","top2","top3");
-        const text = li.textContent.replace(/^\d+\.\s*/,"");
-        if(i===0){li.classList.add("top1"); li.textContent=`1. ${text}`;}
-        else if(i===1){li.classList.add("top2"); li.textContent=`2. ${text}`;}
-        else if(i===2){li.classList.add("top3"); li.textContent=`3. ${text}`;}
-        else li.textContent = text;
-      });
-    }
+function updateTop3Styling() {
+  [...rankingList.children].forEach((li,i)=>{
+    li.classList.remove("top1","top2","top3");
+    const text = li.textContent.replace(/^\d+\.\s*/,"");
+    if(i===0){ li.classList.add("top1"); li.textContent=`1. ${text}`; }
+    else if(i===1){ li.classList.add("top2"); li.textContent=`2. ${text}`; }
+    else if(i===2){ li.classList.add("top3"); li.textContent=`3. ${text}`; }
+    else li.textContent=text;
+  });
+}
 
-    document.getElementById("submitBtn").addEventListener("click", ()=>{
-      const top3 = [...rankingList.children].slice(0,3).map(li=>li.textContent.replace(/^\d+\.\s*/,""));
-      document.getElementById("field1").value = top3[0]||"";
-      document.getElementById("field2").value = top3[1]||"";
-      document.getElementById("field3").value = top3[2]||"";
-      document.getElementById("hiddenGoogleForm").submit();
-      document.getElementById("responseMsg").innerText="Your vote has been submitted. Thank you!";
-    });
+document.getElementById("submitBtn").addEventListener("click", ()=>{
+  const top3 = [...rankingList.children].slice(0,3).map(li=>li.textContent.replace(/^\d+\.\s*/,""));
+  document.getElementById("field1").value=top3[0]||"";
+  document.getElementById("field2").value=top3[1]||"";
+  document.getElementById("field3").value=top3[2]||"";
+  document.getElementById("hiddenGoogleForm").submit();
+  document.getElementById("responseMsg").innerText="Your vote has been submitted. Thank you!";
+});
 
-    loadVideos();
-  </script>
+loadPosts();
+</script>
 </body>
 </html>
