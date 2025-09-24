@@ -147,6 +147,27 @@
   <iframe name="hiddenIframe" style="display: none;"></iframe>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script>
+  // Object to store Reddit upvotes
+  window.redditUpvotes = {};
+
+  async function loadRedditUpvotes() {
+    for (const post of posts) {
+      try {
+        const res = await fetch(post.url + ".json");
+        const json = await res.json();
+        const upvotes = json[0].data.children[0].data.ups || 0;
+        window.redditUpvotes[post.url] = upvotes;
+      } catch (err) {
+        console.error("Failed to fetch upvotes for:", post.url, err);
+        window.redditUpvotes[post.url] = 10; // placeholder for failure
+      }
+    }
+    console.log("Reddit upvotes fetched:", window.redditUpvotes);
+  }
+
+  loadRedditUpvotes();
+</script>
 
   <script>
     const posts = [
