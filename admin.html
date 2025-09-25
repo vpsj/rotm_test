@@ -1,12 +1,101 @@
-// pseudo-code logic
-const videoScores = {}; 
-videos.forEach(v => videoScores[v.id] = { title: v.title, upvotes: v.upvotes, voteScore: 0 });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ROTM Admin Dashboard</title>
+<style>
+  body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
+  table { width:100%; border-collapse:collapse; margin-top:20px; }
+  th, td { border:1px solid #555; padding:10px; text-align:center; }
+  th { background:#333; }
+  tr.top1 { background:#d4af37; color:#111; font-weight:bold; }
+  tr.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
+  tr.top3 { background:#cd7f32; color:#111; font-weight:bold; }
+  button { margin-top:20px; padding:10px 20px; font-size:16px; }
+</style>
+</head>
+<body>
+<h1>ROTM Admin Dashboard</h1>
+<p>Live vote & ranking stats</p>
 
-votes.forEach(vote => {
-  if(vote.rank1) videoScores[vote.rank1].voteScore += 100;
-  if(vote.rank2) videoScores[vote.rank2].voteScore += 50;
-  if(vote.rank3) videoScores[vote.rank3].voteScore += 25;
+<button id="resetBtn">Reset Votes</button>
+
+<table id="rankingTable">
+  <thead>
+    <tr>
+      <th>Rank</th>
+      <th>Video Title</th>
+      <th>Reddit Upvotes</th>
+      <th>Vote Score</th>
+      <th>Total Score</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
+  authDomain: "rotm-2a088.firebaseapp.com",
+  projectId: "rotm-2a088"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+async function loadRanking() {
+  const videosSnap = await getDocs(collection(db, "videos"));
+  const votesSnap = await getDocs(collection(db, "votes"));
+
+  const videos = {};
+  videosSnap.forEach(docSnap => {
+    const data = docSnap.data();
+    videos[docSnap.id] = {
+      title: data.title,
+      upvotes: data.upvotes,
+      voteScore: 0
+    };
+  });
+
+  votesSnap.forEach(voteDoc => {
+    const vote = voteDoc.data();
+    if(vote.rank1 && videos[vote.rank1]) videos[vote.rank1].voteScore += 100;
+    if(vote.rank2 && videos[vote.rank2]) videos[vote.rank2].voteScore += 50;
+    if(vote.rank3 && videos[vote.rank3]) videos[vote.rank3].voteScore += 25;
+  });
+
+  const rankingArr = Object.entries(videos).map(([id, v]) => ({
+    id, title:v.title, upvotes:v.upvotes, voteScore:v.voteScore, totalScore:v.upvotes + v.voteScore
+  }));
+
+  rankingArr.sort((a,b) => b.totalScore - a.totalScore);
+
+  const tbody = document.querySelector("#rankingTable tbody");
+  tbody.innerHTML = "";
+  rankingArr.forEach((v,i)=>{
+    const tr = document.createElement("tr");
+    if(i===0) tr.classList.add("top1");
+    else if(i===1) tr.classList.add("top2");
+    else if(i===2) tr.classList.add("top3");
+    tr.innerHTML = `<td>${i+1}</td><td>${v.title}</td><td>${v.upvotes}</td><td>${v.voteScore}</td><td>${v.totalScore}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// Optional: Reset votes
+document.getElementById("resetBtn").addEventListener("click", async ()=>{
+  if(!confirm("Are you sure you want to delete all votes?")) return;
+  const votesSnap = await getDocs(collection(db, "votes"));
+  for(const voteDoc of votesSnap.docs){
+    await deleteDoc(doc(db, "votes", voteDoc.id));
+  }
+  loadRanking();
 });
 
-// compute totalScore = upvotes + voteScore
-// sort descending
+loadRanking();
+</script>
+</body>
+</html>
