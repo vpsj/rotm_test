@@ -18,167 +18,194 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 #resetButton { background-color: #c0392b; color: white; border: none; }
 .tab { display:none; }
 .tab.active { display:block; }
+#authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 </style>
 </head>
 <body>
 <h1>ROTM Admin Dashboard</h1>
+<div id="authStatus">Checking authentication...</div>
 
-<div class="tab-buttons">
-  <button id="scoresTabBtn">Scores</button>
-  <button id="votesTabBtn">Detailed Votes</button>
-  <button id="resetButton">Reset All Votes</button>
-</div>
+<div id="adminContent" style="display:none;">
+  <div class="tab-buttons">
+    <button id="scoresTabBtn">Scores</button>
+    <button id="votesTabBtn">Detailed Votes</button>
+    <button id="resetButton">Reset All Votes</button>
+  </div>
 
-<div id="scoresTab" class="tab active">
-  <table id="rankingTable">
-    <thead>
-      <tr>
-        <th>Rank</th>
-        <th>Video Title</th>
-        <th>Reddit Upvotes</th>
-        <th>Upvote Points</th>
-        <th>Vote Points</th>
-        <th>Total Score</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
+  <div id="scoresTab" class="tab active">
+    <table id="rankingTable">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Video Title</th>
+          <th>Reddit Upvotes</th>
+          <th>Upvote Points</th>
+          <th>Vote Points</th>
+          <th>Total Score</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-<div id="votesTab" class="tab">
-  <table id="votesTable">
-    <thead>
-      <tr>
-        <th>User ID</th>
-        <th>Rank 1</th>
-        <th>Rank 2</th>
-        <th>Rank 3</th>
-        <th>Timestamp</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <div id="votesTab" class="tab">
+    <table id="votesTable">
+      <thead>
+        <tr>
+          <th>User ID</th>
+          <th>Rank 1</th>
+          <th>Rank 2</th>
+          <th>Rank 3</th>
+          <th>Timestamp</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
   authDomain: "rotm-2a088.firebaseapp.com",
   projectId: "rotm-2a088"
 };
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
 
-const scoresTabBtn = document.getElementById("scoresTabBtn");
-const votesTabBtn = document.getElementById("votesTabBtn");
-const scoresTab = document.getElementById("scoresTab");
-const votesTab = document.getElementById("votesTab");
-const resetButton = document.getElementById("resetButton"); 
+const authStatus = document.getElementById("authStatus");
+const adminContent = document.getElementById("adminContent");
 
-scoresTabBtn.addEventListener("click", () => { scoresTab.classList.add("active"); votesTab.classList.remove("active"); });
-votesTabBtn.addEventListener("click", () => { votesTab.classList.add("active"); scoresTab.classList.remove("active"); });
-
-const videosCol = collection(db, "videos");
-const votesCol = collection(db, "votes");
-
-let videosData = {};
-let votesData = [];
-let videosLoaded = false;
-let votesLoaded = false;
-
-onSnapshot(videosCol, snapshot => {
-  videosData = {};
-  snapshot.docs.forEach(doc => {
-    videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0 };
-  });
-  videosLoaded = true;
-  if(votesLoaded) calculateScores();
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    authStatus.innerText = "Please sign in with your Google account...";
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      console.error("Login failed", e);
+      authStatus.innerText = "Login required. Refresh to try again.";
+      return;
+    }
+  } else {
+    // At this point Firestore rules enforce admin-only reads
+    authStatus.innerText = "Signed in as " + user.email;
+    adminContent.style.display = "block";
+    initDashboard();
+  }
 });
 
-onSnapshot(votesCol, snapshot => {
-  votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  votesLoaded = true;
-  if(videosLoaded) calculateScores();
-  renderVotes();
-});
+// ---------------- Dashboard Logic ----------------
+function initDashboard() {
+  const scoresTabBtn = document.getElementById("scoresTabBtn");
+  const votesTabBtn = document.getElementById("votesTabBtn");
+  const scoresTab = document.getElementById("scoresTab");
+  const votesTab = document.getElementById("votesTab");
+  const resetButton = document.getElementById("resetButton"); 
 
-function calculateScores() {
-  if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
+  scoresTabBtn.addEventListener("click", () => { scoresTab.classList.add("active"); votesTab.classList.remove("active"); });
+  votesTabBtn.addEventListener("click", () => { votesTab.classList.add("active"); scoresTab.classList.remove("active"); });
 
-  // Reset points
-  Object.values(videosData).forEach(v => { v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
+  const videosCol = collection(db, "videos");
+  const votesCol = collection(db, "votes");
 
-  // Vote points
-  votesData.forEach(vote=>{
-    if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
-    if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
-    if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
+  let videosData = {};
+  let votesData = [];
+  let videosLoaded = false;
+  let votesLoaded = false;
+
+  onSnapshot(videosCol, snapshot => {
+    videosData = {};
+    snapshot.docs.forEach(doc => {
+      videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0 };
+    });
+    videosLoaded = true;
+    if(votesLoaded) calculateScores();
   });
 
-  // Upvote points
-  const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>a[1].upvotes - b[1].upvotes);
-  const step = 10;
-  sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(i+1); });
-
-  // Total score
-  Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
-
-  renderRanking();
-}
-
-function renderRanking() {
-  const tbody = document.querySelector("#rankingTable tbody");
-  tbody.innerHTML = "";
-  const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
-  sorted.forEach(([id,v],i)=>{
-    const tr = document.createElement("tr");
-    if(i===0) tr.classList.add("top1");
-    else if(i===1) tr.classList.add("top2");
-    else if(i===2) tr.classList.add("top3");
-    tr.innerHTML = `
-      <td>${i+1}</td>
-      <td>${v.title}</td>
-      <td>${v.upvotes || 0}</td>
-      <td>${v.upvotePoints || 0}</td>
-      <td>${v.votePoints || 0}</td>
-      <td>${v.totalScore || 0}</td>
-    `;
-    tbody.appendChild(tr);
+  onSnapshot(votesCol, snapshot => {
+    votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    votesLoaded = true;
+    if(videosLoaded) calculateScores();
+    renderVotes();
   });
-}
 
-function renderVotes() {
-  const tbody = document.querySelector("#votesTable tbody");
-  tbody.innerHTML = "";
-  if(!votesData || votesData.length===0 || Object.keys(videosData).length===0) return;
+  function calculateScores() {
+    if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
 
-  votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0))
-    .forEach(v=>{
+    Object.values(videosData).forEach(v => { v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
+
+    votesData.forEach(vote=>{
+      if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
+      if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
+      if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
+    });
+
+    const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>a[1].upvotes - b[1].upvotes);
+    const step = 10;
+    sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(i+1); });
+
+    Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
+
+    renderRanking();
+  }
+
+  function renderRanking() {
+    const tbody = document.querySelector("#rankingTable tbody");
+    tbody.innerHTML = "";
+    const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
+    sorted.forEach(([id,v],i)=>{
       const tr = document.createElement("tr");
-      const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
+      if(i===0) tr.classList.add("top1");
+      else if(i===1) tr.classList.add("top2");
+      else if(i===2) tr.classList.add("top3");
       tr.innerHTML = `
-        <td>${v.userId || ""}</td>
-        <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
-        <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
-        <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
-        <td>${ts}</td>
+        <td>${i+1}</td>
+        <td>${v.title}</td>
+        <td>${v.upvotes || 0}</td>
+        <td>${v.upvotePoints || 0}</td>
+        <td>${v.votePoints || 0}</td>
+        <td>${v.totalScore || 0}</td>
       `;
       tbody.appendChild(tr);
     });
-}
+  }
 
-// Reset votes
-resetButton.addEventListener('click', async () => {
-  if(!confirm("Delete ALL votes permanently?")) return;
-  try {
-    const querySnapshot = await getDocs(votesCol);
-    await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref)));
-    alert("All votes reset successfully.");
-  } catch(e) { console.error(e); alert("Failed to reset votes."); }
-});
+  function renderVotes() {
+    const tbody = document.querySelector("#votesTable tbody");
+    tbody.innerHTML = "";
+    if(!votesData || votesData.length===0 || Object.keys(videosData).length===0) return;
+
+    votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0))
+      .forEach(v=>{
+        const tr = document.createElement("tr");
+        const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
+        tr.innerHTML = `
+          <td>${v.userId || ""}</td>
+          <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
+          <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
+          <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
+          <td>${ts}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+  }
+
+  resetButton.addEventListener('click', async () => {
+    if(!confirm("Delete ALL votes permanently?")) return;
+    try {
+      const querySnapshot = await getDocs(votesCol);
+      await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref)));
+      alert("All votes reset successfully.");
+    } catch(e) { console.error(e); alert("Failed to reset votes."); }
+  });
+}
 </script>
 </body>
 </html>
