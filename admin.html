@@ -69,11 +69,9 @@ const firebaseConfig = {
   authDomain: "rotm-2a088.firebaseapp.com",
   projectId: "rotm-2a088"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Tab and button elements
 const scoresTabBtn = document.getElementById("scoresTabBtn");
 const votesTabBtn = document.getElementById("votesTabBtn");
 const scoresTab = document.getElementById("scoresTab");
@@ -91,81 +89,51 @@ let votesData = [];
 let videosLoaded = false;
 let votesLoaded = false;
 
-// Listeners
 onSnapshot(videosCol, snapshot => {
-  const newVideosData = {};
+  videosData = {};
   snapshot.docs.forEach(doc => {
-    newVideosData[doc.id] = { ...doc.data() };
+    videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0 };
   });
-  videosData = newVideosData;
   videosLoaded = true;
-  if (votesLoaded) calculateScores();
+  if(votesLoaded) calculateScores();
 });
 
 onSnapshot(votesCol, snapshot => {
   votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   votesLoaded = true;
-  if (videosLoaded) calculateScores();
+  if(videosLoaded) calculateScores();
   renderVotes();
 });
 
-// =================================================================
-// COMPLETELY REWRITTEN SCORING LOGIC FOR RELIABILITY
-// =================================================================
 function calculateScores() {
-  if (!videosLoaded || !votesLoaded || Object.keys(videosData).length === 0) return;
+  if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
 
-  // Step 1: Create a temporary map to safely store calculated points.
-  // This avoids modifying the main data object while iterating.
-  const pointsMap = {};
-  Object.keys(videosData).forEach(videoId => {
-    pointsMap[videoId] = { votePoints: 0 };
+  // Reset points
+  Object.values(videosData).forEach(v => { v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
+
+  // Vote points
+  votesData.forEach(vote=>{
+    if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
+    if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
+    if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
   });
 
-  // Step 2: Iterate through all votes and populate the temporary points map.
-  votesData.forEach(vote => {
-    if (vote.rank1 && pointsMap[vote.rank1]) {
-      pointsMap[vote.rank1].votePoints += 100;
-    }
-    if (vote.rank2 && pointsMap[vote.rank2]) {
-      pointsMap[vote.rank2].votePoints += 50;
-    }
-    if (vote.rank3 && pointsMap[vote.rank3]) {
-      pointsMap[vote.rank3].votePoints += 25;
-    }
-  });
-
-  // Step 3: Safely merge the calculated vote points back into the main videosData object.
-  Object.keys(videosData).forEach(videoId => {
-    videosData[videoId].votePoints = pointsMap[videoId].votePoints || 0;
-  });
-
-  // Step 4: Calculate upvote points.
-  const sortedByUpvotes = Object.values(videosData).slice().sort((a, b) => a.upvotes - b.upvotes);
+  // Upvote points
+  const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>a[1].upvotes - b[1].upvotes);
   const step = 10;
-  sortedByUpvotes.forEach((video, index) => {
-    // We need to find the video in the original videosData to assign the points,
-    // as sorting creates a new array order.
-    const originalVideo = Object.values(videosData).find(v => v.title === video.title);
-    if(originalVideo) {
-      originalVideo.upvotePoints = step * (index + 1);
-    }
-  });
+  sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(i+1); });
 
-  // Step 5: Calculate the final total score for each video.
-  Object.values(videosData).forEach(video => {
-    video.totalScore = (video.votePoints || 0) + (video.upvotePoints || 0);
-  });
+  // Total score
+  Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
 
-  // Step 6: Render the updated table.
   renderRanking();
 }
 
 function renderRanking() {
   const tbody = document.querySelector("#rankingTable tbody");
   tbody.innerHTML = "";
-  const sorted = Object.values(videosData).sort((a,b) => b.totalScore - a.totalScore);
-  sorted.forEach((v,i) => {
+  const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
+  sorted.forEach(([id,v],i)=>{
     const tr = document.createElement("tr");
     if(i===0) tr.classList.add("top1");
     else if(i===1) tr.classList.add("top2");
@@ -185,37 +153,31 @@ function renderRanking() {
 function renderVotes() {
   const tbody = document.querySelector("#votesTable tbody");
   tbody.innerHTML = "";
-  if(!votesData || votesData.length === 0 || Object.keys(videosData).length === 0) return;
+  if(!votesData || votesData.length===0 || Object.keys(videosData).length===0) return;
 
-  const sortedVotes = votesData.slice().sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-
-  sortedVotes.forEach(v => {
-    const tr = document.createElement("tr");
-    const ts = v.timestamp && v.timestamp.seconds ? new Date(v.timestamp.seconds * 1000).toLocaleString() : "";
-    tr.innerHTML = `
-      <td>${v.userId || ""}</td>
-      <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
-      <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
-      <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
-      <td>${ts}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+  votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0))
+    .forEach(v=>{
+      const tr = document.createElement("tr");
+      const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
+      tr.innerHTML = `
+        <td>${v.userId || ""}</td>
+        <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
+        <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
+        <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
+        <td>${ts}</td>
+      `;
+      tbody.appendChild(tr);
+    });
 }
 
+// Reset votes
 resetButton.addEventListener('click', async () => {
-  if (!confirm("Are you sure you want to permanently delete ALL votes? This action cannot be undone.")) {
-    return;
-  }
+  if(!confirm("Delete ALL votes permanently?")) return;
   try {
     const querySnapshot = await getDocs(votesCol);
-    const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
-    await Promise.all(deletePromises);
-    alert("All votes have been successfully reset.");
-  } catch (error) {
-    console.error("Error removing documents: ", error);
-    alert("Failed to reset votes. Check the console for errors.");
-  }
+    await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref)));
+    alert("All votes reset successfully.");
+  } catch(e) { console.error(e); alert("Failed to reset votes."); }
 });
 </script>
 </body>
