@@ -4,38 +4,65 @@
 <meta charset="UTF-8">
 <title>ROTM Admin Dashboard</title>
 <style>
-  body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
-  table { width:100%; border-collapse:collapse; margin-top:20px; }
-  th, td { border:1px solid #555; padding:10px; text-align:center; }
-  th { background:#333; }
-  tr.top1 { background:#d4af37; color:#111; font-weight:bold; }
-  tr.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
-  tr.top3 { background:#cd7f32; color:#111; font-weight:bold; }
-  button { margin-top:20px; padding:10px 20px; font-size:16px; }
+body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
+h1, h2 { text-align:center; }
+table { width:100%; border-collapse:collapse; margin-top:20px; }
+th, td { border:1px solid #555; padding:10px; text-align:center; }
+th { background:#333; }
+tr.top1 { background:#d4af37; color:#111; font-weight:bold; }
+tr.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
+tr.top3 { background:#cd7f32; color:#111; font-weight:bold; }
+button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
+.tab-buttons { text-align:center; margin-top:20px; }
+.tab-buttons button { margin:0 5px; }
+.tab { display:none; }
+.tab.active { display:block; }
 </style>
 </head>
 <body>
 <h1>ROTM Admin Dashboard</h1>
-<p>Live vote & ranking stats</p>
 
-<button id="resetBtn">Reset Votes</button>
+<div class="tab-buttons">
+  <button id="scoresTabBtn">Scores</button>
+  <button id="votesTabBtn">Detailed Votes</button>
+</div>
 
-<table id="rankingTable">
-  <thead>
-    <tr>
-      <th>Rank</th>
-      <th>Video Title</th>
-      <th>Reddit Upvotes</th>
-      <th>Vote Score</th>
-      <th>Total Score</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
+<!-- Scores Tab -->
+<div id="scoresTab" class="tab active">
+  <table id="rankingTable">
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Video Title</th>
+        <th>Reddit Upvotes</th>
+        <th>Upvote Points</th>
+        <th>Vote Points</th>
+        <th>Total Score</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Votes Tab -->
+<div id="votesTab" class="tab">
+  <table id="votesTable">
+    <thead>
+      <tr>
+        <th>User ID</th>
+        <th>Rank 1</th>
+        <th>Rank 2</th>
+        <th>Rank 3</th>
+        <th>Timestamp</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
@@ -46,56 +73,43 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-async function loadRanking() {
-  const videosSnap = await getDocs(collection(db, "videos"));
-  const votesSnap = await getDocs(collection(db, "votes"));
+// Tabs logic
+const scoresTabBtn = document.getElementById("scoresTabBtn");
+const votesTabBtn = document.getElementById("votesTabBtn");
+const scoresTab = document.getElementById("scoresTab");
+const votesTab = document.getElementById("votesTab");
 
-  const videos = {};
-  videosSnap.forEach(docSnap => {
-    const data = docSnap.data();
-    videos[docSnap.id] = {
-      title: data.title,
-      upvotes: data.upvotes,
-      voteScore: 0
-    };
+scoresTabBtn.addEventListener("click", ()=>{scoresTab.classList.add("active"); votesTab.classList.remove("active");});
+votesTabBtn.addEventListener("click", ()=>{votesTab.classList.add("active"); scoresTab.classList.remove("active");});
+
+// Real-time listener for videos and votes
+const videosCol = collection(db, "videos");
+const votesCol = collection(db, "votes");
+
+let videosData = {};
+let votesData = [];
+
+onSnapshot(videosCol, snapshot=>{
+  snapshot.docs.forEach(doc=>{
+    videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0 };
   });
-
-  votesSnap.forEach(voteDoc => {
-    const vote = voteDoc.data();
-    if(vote.rank1 && videos[vote.rank1]) videos[vote.rank1].voteScore += 100;
-    if(vote.rank2 && videos[vote.rank2]) videos[vote.rank2].voteScore += 50;
-    if(vote.rank3 && videos[vote.rank3]) videos[vote.rank3].voteScore += 25;
-  });
-
-  const rankingArr = Object.entries(videos).map(([id, v]) => ({
-    id, title:v.title, upvotes:v.upvotes, voteScore:v.voteScore, totalScore:v.upvotes + v.voteScore
-  }));
-
-  rankingArr.sort((a,b) => b.totalScore - a.totalScore);
-
-  const tbody = document.querySelector("#rankingTable tbody");
-  tbody.innerHTML = "";
-  rankingArr.forEach((v,i)=>{
-    const tr = document.createElement("tr");
-    if(i===0) tr.classList.add("top1");
-    else if(i===1) tr.classList.add("top2");
-    else if(i===2) tr.classList.add("top3");
-    tr.innerHTML = `<td>${i+1}</td><td>${v.title}</td><td>${v.upvotes}</td><td>${v.voteScore}</td><td>${v.totalScore}</td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-// Optional: Reset votes
-document.getElementById("resetBtn").addEventListener("click", async ()=>{
-  if(!confirm("Are you sure you want to delete all votes?")) return;
-  const votesSnap = await getDocs(collection(db, "votes"));
-  for(const voteDoc of votesSnap.docs){
-    await deleteDoc(doc(db, "votes", voteDoc.id));
-  }
-  loadRanking();
+  calculateScores();
 });
 
-loadRanking();
-</script>
-</body>
-</html>
+onSnapshot(votesCol, snapshot=>{
+  votesData = snapshot.docs.map(doc=>({ id: doc.id, ...doc.data() }));
+  calculateScores();
+  renderVotes();
+});
+
+// Scoring logic
+function calculateScores() {
+  if(!votesData || !videosData) return;
+
+  // Reset vote points
+  Object.values(videosData).forEach(v=>v.votePoints=0);
+
+  // Calculate vote points
+  votesData.forEach(vote=>{
+    if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
+    if(vote.rank2 && videosData[vote.rank2]) videosData[vo]()
