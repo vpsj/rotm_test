@@ -16,18 +16,21 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 .tab-buttons { text-align:center; margin-top:20px; }
 .tab-buttons button { margin:0 5px; }
 #resetButton { background-color: #c0392b; color: white; border: none; }
+#authBox { text-align:center; margin-top:50px; }
+#authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 .tab { display:none; }
 .tab.active { display:block; }
-#authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 #votesPieChart { max-width:600px; margin:20px auto; display:block; }
-#loginBtn { padding:10px 20px; font-size:16px; cursor:pointer; margin-top:20px; }
 </style>
 </head>
 <body>
 
 <h1>ROTM Admin Dashboard</h1>
 <div id="authStatus">Checking authentication...</div>
-<div id="authBox"><button id="loginBtn">Sign in with Google</button></div>
+
+<div id="authBox">
+  <button id="loginBtn">Sign in with Google</button>
+</div>
 
 <div id="adminContent" style="display:none;">
   <div class="tab-buttons">
@@ -74,7 +77,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import Chart from 'https://cdn.jsdelivr.net/npm/chart.js';
 
 const firebaseConfig = {
@@ -88,33 +91,31 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// DOM Elements
-const loginBtn = document.getElementById("loginBtn");
 const authStatus = document.getElementById("authStatus");
-const authBox = document.getElementById("authBox");
 const adminContent = document.getElementById("adminContent");
+const authBox = document.getElementById("authBox");
+const loginBtn = document.getElementById("loginBtn");
 
-// ---------------- Login Button ----------------
+// ---------------- Authentication ----------------
 loginBtn.addEventListener("click", async () => {
   try {
     await signInWithPopup(auth, provider);
   } catch(e){
     console.error("Login failed", e);
-    authStatus.innerText="Login failed. Try again.";
+    authStatus.innerText = "Login failed. Try again.";
   }
 });
 
-// ---------------- Auth Listener ----------------
-onAuthStateChanged(auth, (user)=>{
+onAuthStateChanged(auth, user => {
   if(user){
     authBox.style.display="none";
-    authStatus.innerText="Signed in as "+user.email;
+    authStatus.innerText = "Signed in as " + user.email;
     adminContent.style.display="block";
     initDashboard();
   } else {
-    adminContent.style.display="none";
     authBox.style.display="block";
-    authStatus.innerText="Not signed in";
+    authStatus.innerText = "Not signed in";
+    adminContent.style.display="none";
   }
 });
 
@@ -139,40 +140,40 @@ function initDashboard(){
   let videosLoaded=false, votesLoaded=false;
   let currentRanking = [];
   let votesPieChart = null;
-  let pendingUpdate=false;
+  let pendingUpdate = false;
 
-  // ---------------- Firestore Listeners ----------------
-  onSnapshot(videosCol, snapshot=>{
-    videosData={};
+  // Firestore listeners
+  onSnapshot(videosCol, snapshot => { 
+    videosData = {}; 
     snapshot.docs.forEach(doc=>{ videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0 }; });
-    videosLoaded=true;
-    if(votesLoaded) triggerRankingUpdate();
+    videosLoaded=true; 
+    if(votesLoaded) triggerRankingUpdate(); 
   });
 
-  onSnapshot(votesCol, snapshot=>{
-    votesData = snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));
-    votesLoaded=true;
-    if(videosLoaded) triggerRankingUpdate();
+  onSnapshot(votesCol, snapshot => { 
+    votesData = snapshot.docs.map(doc=>({id:doc.id,...doc.data()})); 
+    votesLoaded=true; 
+    if(videosLoaded) triggerRankingUpdate(); 
     renderVotes();
   });
 
-  // ---------------- Ranking ----------------
   function calculateScores(){
     Object.values(videosData).forEach(v=>{ v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
-    votesData.forEach(v=>{
-      if(v.rank1 && videosData[v.rank1]) videosData[v.rank1].votePoints+=100;
-      if(v.rank2 && videosData[v.rank2]) videosData[v.rank2].votePoints+=50;
-      if(v.rank3 && videosData[v.rank3]) videosData[v.rank3].votePoints+=25;
+    votesData.forEach(vote=>{
+      if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints+=100;
+      if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints+=50;
+      if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints+=25;
     });
 
     const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>a[1].upvotes-b[1].upvotes);
-    sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = 10*(i+1); });
-    Object.values(videosData).forEach(v=>{ v.totalScore=v.votePoints+v.upvotePoints; });
+    const step = 10;
+    sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(i+1); });
+    Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
   }
 
   function triggerRankingUpdate(){
     calculateScores();
-    const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore-b[1].totalScore);
+    const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
     const newRanking = sorted.map(([id,v])=>({id, ...v}));
 
     if(document.visibilityState==="visible"){
@@ -210,47 +211,50 @@ function initDashboard(){
       `;
       tbody.appendChild(tr);
     });
-    // slow dramatic fade-in
     tbody.querySelectorAll("tr").forEach((tr,i)=>{
       tr.style.opacity=0;
-      setTimeout(()=>{ tr.style.transition="opacity 1.5s"; tr.style.opacity=1; }, i*400);
+      setTimeout(()=>{ tr.style.transition="opacity 1.2s"; tr.style.opacity=1; }, i*300);
     });
   }
 
-  // ---------------- Votes Table & Pie Chart ----------------
   function renderVotes(){
     const tbody = document.querySelector("#votesTable tbody");
     tbody.innerHTML="";
     if(!votesData.length || !Object.keys(videosData).length) return;
-    votesData.slice().sort((a,b)=> (b.timestamp?.seconds||0)-(a.timestamp?.seconds||0)).forEach(v=>{
-      const tr = document.createElement("tr");
-      const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
-      tr.innerHTML = `
-        <td>${v.userId||""}</td>
-        <td>${v.rank1 ? videosData[v.rank1]?.title||v.rank1:""}</td>
-        <td>${v.rank2 ? videosData[v.rank2]?.title||v.rank2:""}</td>
-        <td>${v.rank3 ? videosData[v.rank3]?.title||v.rank3:""}</td>
-        <td>${ts}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    votesData.slice().sort((a,b)=> (b.timestamp?.seconds||0)-(a.timestamp?.seconds||0))
+      .forEach(v=>{
+        const tr = document.createElement("tr");
+        const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
+        tr.innerHTML = `
+          <td>${v.userId || ""}</td>
+          <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
+          <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
+          <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
+          <td>${ts}</td>
+        `;
+        tbody.appendChild(tr);
+      });
   }
 
   function renderPieChart(){
     if(!votesData.length || !Object.keys(videosData).length) return;
-    const voteCounts={};
+    const voteCounts = {};
     Object.keys(videosData).forEach(id=>voteCounts[videosData[id].title]=0);
     votesData.forEach(v=>{
-      if(v.rank1) voteCounts[v.rank1]+=1;
-      if(v.rank2) voteCounts[v.rank2]+=0.5;
-      if(v.rank3) voteCounts[v.rank3]+=0.25;
+      if(v.rank1 && videosData[v.rank1]) voteCounts[videosData[v.rank1].title]+=1;
+      if(v.rank2 && videosData[v.rank2]) voteCounts[videosData[v.rank2].title]+=0.5;
+      if(v.rank3 && videosData[v.rank3]) voteCounts[videosData[v.rank3].title]+=0.25;
     });
-    const data = { labels:Object.keys(voteCounts), datasets:[{data:Object.values(voteCounts), backgroundColor:['#d4af37','#c0c0c0','#cd7f32','#444','#666','#888','#aaa']}]};
+
+    const data = {
+      labels: Object.keys(voteCounts),
+      datasets:[{data:Object.values(voteCounts), backgroundColor:['#d4af37','#c0c0c0','#cd7f32','#444','#666','#888','#aaa']}]
+    };
+
     if(votesPieChart) votesPieChart.destroy();
-    votesPieChart = new Chart(votesPieChartCanvas,{type:'pie',data:data});
+    votesPieChart = new Chart(votesPieChartCanvas, {type:'pie', data});
   }
 
-  // ---------------- Reset Votes ----------------
   resetButton.addEventListener("click", async()=>{
     if(!confirm("Delete ALL votes permanently?")) return;
     try{
@@ -260,11 +264,12 @@ function initDashboard(){
     }catch(e){ console.error(e); alert("Failed to reset votes."); }
   });
 
-  // ---------------- Export CSV ----------------
   exportCSVBtn.addEventListener("click", ()=>{
     if(!votesData.length || !Object.keys(videosData).length) return;
-    const csv=[];
-    csv.push(["UserID","Rank1","Rank2","Rank3","Timestamp"].join(","));
+
+    const csv = [];
+    const headers = ["UserID","Rank1","Rank2","Rank3","Timestamp"];
+    csv.push(headers.join(","));
     votesData.forEach(v=>{
       const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
       csv.push([v.userId||"",v.rank1||"",v.rank2||"",v.rank3||"",ts].join(","));
@@ -273,7 +278,8 @@ function initDashboard(){
     Object.values(videosData).forEach(v=>{
       csv.push([v.title,v.upvotes||0,v.upvotePoints||0,v.votePoints||0,v.totalScore||0].join(","));
     });
-    const blob = new Blob([csv.join("\n")],{type:"text/csv"});
+
+    const blob = new Blob([csv.join("\n")], {type:"text/csv"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href=url;
