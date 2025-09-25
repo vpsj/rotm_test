@@ -15,7 +15,7 @@ tr.top3 { background:#cd7f32; color:#111; font-weight:bold; }
 button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 .tab-buttons { text-align:center; margin-top:20px; }
 .tab-buttons button { margin:0 5px; }
-#resetButton { background-color: #c0392b; color: white; border: none; } /* ADDED: Style for reset button */
+#resetButton { background-color: #c0392b; color: white; border: none; }
 .tab { display:none; }
 .tab.active { display:block; }
 </style>
@@ -61,7 +61,6 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 </div>
 
 <script type="module">
-// CHANGED: Added getDocs and deleteDoc for the reset functionality
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
@@ -79,12 +78,11 @@ const scoresTabBtn = document.getElementById("scoresTabBtn");
 const votesTabBtn = document.getElementById("votesTabBtn");
 const scoresTab = document.getElementById("scoresTab");
 const votesTab = document.getElementById("votesTab");
-const resetButton = document.getElementById("resetButton"); // ADDED: Reset button element
+const resetButton = document.getElementById("resetButton"); 
 
 scoresTabBtn.addEventListener("click", () => { scoresTab.classList.add("active"); votesTab.classList.remove("active"); });
 votesTabBtn.addEventListener("click", () => { votesTab.classList.add("active"); scoresTab.classList.remove("active"); });
 
-// Firestore collections
 const videosCol = collection(db, "videos");
 const votesCol = collection(db, "votes");
 
@@ -93,7 +91,6 @@ let votesData = [];
 let videosLoaded = false;
 let votesLoaded = false;
 
-// Listen for videos
 onSnapshot(videosCol, snapshot => {
   videosData = {};
   snapshot.docs.forEach(doc => {
@@ -103,7 +100,6 @@ onSnapshot(videosCol, snapshot => {
   if(votesLoaded) calculateScores();
 });
 
-// Listen for votes
 onSnapshot(votesCol, snapshot => {
   votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   votesLoaded = true;
@@ -111,43 +107,42 @@ onSnapshot(votesCol, snapshot => {
   renderVotes();
 });
 
-// Calculate scores
+// =================================================================
+// FIXED AND SIMPLIFIED FUNCTION
+// =================================================================
 function calculateScores() {
-  if(!videosLoaded || !votesLoaded || Object.keys(videosData).length === 0) return;
+  if (!videosLoaded || !votesLoaded || Object.keys(videosData).length === 0) return;
 
   // 1. Reset points for all videos before recalculating
-  Object.values(videosData).forEach(v => {
-    v.votePoints = 0;
-    v.upvotePoints = 0;
-    v.totalScore = 0;
+  Object.values(videosData).forEach(video => {
+    video.votePoints = 0;
+    video.upvotePoints = 0;
   });
 
-  // 2. FIXED: Calculate total vote points from all user votes
+  // 2. Calculate total vote points from all user votes
   // Rank 1: 100 points, Rank 2: 50 points, Rank 3: 25 points
   votesData.forEach(vote => {
-    if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
-    if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
-    if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
+    if (vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
+    if (vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
+    if (vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
   });
 
-  // 3. Calculate points from Reddit upvotes
-  const sortedByUpvotes = Object.values(videosData).slice().sort((a,b) => a.upvotes - b.upvotes);
+  // 3. Calculate points from Reddit upvotes (lowest upvotes gets 10 points, etc.)
+  const sortedByUpvotes = Object.values(videosData).slice().sort((a, b) => a.upvotes - b.upvotes);
   const step = 10;
   sortedByUpvotes.forEach((video, index) => {
-    // Find the original video object in videosData to update it
-    const originalVideo = Object.values(videosData).find(v => v.title === video.title);
-    if(originalVideo) {
-      originalVideo.upvotePoints = step * (index + 1);
-    }
+    // This directly modifies the original object in videosData because it's a reference
+    video.upvotePoints = step * (index + 1);
   });
 
   // 4. Calculate final total score
-  Object.values(videosData).forEach(v => v.totalScore = v.votePoints + v.upvotePoints);
+  Object.values(videosData).forEach(video => {
+    video.totalScore = video.votePoints + video.upvotePoints;
+  });
 
   renderRanking();
 }
 
-// Render ranking table
 function renderRanking() {
   const tbody = document.querySelector("#rankingTable tbody");
   tbody.innerHTML = "";
@@ -169,13 +164,11 @@ function renderRanking() {
   });
 }
 
-// Render detailed votes table
 function renderVotes() {
   const tbody = document.querySelector("#votesTable tbody");
   tbody.innerHTML = "";
   if(!votesData || votesData.length === 0 || Object.keys(videosData).length === 0) return;
 
-  // CHANGED: Sort votes by timestamp in descending order (latest first)
   const sortedVotes = votesData.slice().sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
   sortedVotes.forEach(v => {
@@ -192,18 +185,15 @@ function renderVotes() {
   });
 }
 
-// ADDED: Reset button functionality
 resetButton.addEventListener('click', async () => {
   if (!confirm("Are you sure you want to permanently delete ALL votes? This action cannot be undone.")) {
     return;
   }
   try {
-    console.log("Deleting all votes...");
     const querySnapshot = await getDocs(votesCol);
     const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
     alert("All votes have been successfully reset.");
-    console.log("All votes deleted.");
   } catch (error) {
     console.error("Error removing documents: ", error);
     alert("Failed to reset votes. Check the console for errors.");
