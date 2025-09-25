@@ -73,7 +73,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Tabs
+// Tab and button elements
 const scoresTabBtn = document.getElementById("scoresTabBtn");
 const votesTabBtn = document.getElementById("votesTabBtn");
 const scoresTab = document.getElementById("scoresTab");
@@ -91,63 +91,81 @@ let votesData = [];
 let videosLoaded = false;
 let votesLoaded = false;
 
+// Listeners
 onSnapshot(videosCol, snapshot => {
-  videosData = {};
+  const newVideosData = {};
   snapshot.docs.forEach(doc => {
-    videosData[doc.id] = { ...doc.data(), votePoints: 0, upvotePoints: 0 };
+    newVideosData[doc.id] = { ...doc.data() };
   });
+  videosData = newVideosData;
   videosLoaded = true;
-  if(votesLoaded) calculateScores();
+  if (votesLoaded) calculateScores();
 });
 
 onSnapshot(votesCol, snapshot => {
   votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   votesLoaded = true;
-  if(videosLoaded) calculateScores();
+  if (videosLoaded) calculateScores();
   renderVotes();
 });
 
 // =================================================================
-// FIXED AND SIMPLIFIED FUNCTION
+// COMPLETELY REWRITTEN SCORING LOGIC FOR RELIABILITY
 // =================================================================
 function calculateScores() {
   if (!videosLoaded || !votesLoaded || Object.keys(videosData).length === 0) return;
 
-  // 1. Reset points for all videos before recalculating
-  Object.values(videosData).forEach(video => {
-    video.votePoints = 0;
-    video.upvotePoints = 0;
+  // Step 1: Create a temporary map to safely store calculated points.
+  // This avoids modifying the main data object while iterating.
+  const pointsMap = {};
+  Object.keys(videosData).forEach(videoId => {
+    pointsMap[videoId] = { votePoints: 0 };
   });
 
-  // 2. Calculate total vote points from all user votes
-  // Rank 1: 100 points, Rank 2: 50 points, Rank 3: 25 points
+  // Step 2: Iterate through all votes and populate the temporary points map.
   votesData.forEach(vote => {
-    if (vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
-    if (vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
-    if (vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
+    if (vote.rank1 && pointsMap[vote.rank1]) {
+      pointsMap[vote.rank1].votePoints += 100;
+    }
+    if (vote.rank2 && pointsMap[vote.rank2]) {
+      pointsMap[vote.rank2].votePoints += 50;
+    }
+    if (vote.rank3 && pointsMap[vote.rank3]) {
+      pointsMap[vote.rank3].votePoints += 25;
+    }
   });
 
-  // 3. Calculate points from Reddit upvotes (lowest upvotes gets 10 points, etc.)
+  // Step 3: Safely merge the calculated vote points back into the main videosData object.
+  Object.keys(videosData).forEach(videoId => {
+    videosData[videoId].votePoints = pointsMap[videoId].votePoints || 0;
+  });
+
+  // Step 4: Calculate upvote points.
   const sortedByUpvotes = Object.values(videosData).slice().sort((a, b) => a.upvotes - b.upvotes);
   const step = 10;
   sortedByUpvotes.forEach((video, index) => {
-    // This directly modifies the original object in videosData because it's a reference
-    video.upvotePoints = step * (index + 1);
+    // We need to find the video in the original videosData to assign the points,
+    // as sorting creates a new array order.
+    const originalVideo = Object.values(videosData).find(v => v.title === video.title);
+    if(originalVideo) {
+      originalVideo.upvotePoints = step * (index + 1);
+    }
   });
 
-  // 4. Calculate final total score
+  // Step 5: Calculate the final total score for each video.
   Object.values(videosData).forEach(video => {
-    video.totalScore = video.votePoints + video.upvotePoints;
+    video.totalScore = (video.votePoints || 0) + (video.upvotePoints || 0);
   });
 
+  // Step 6: Render the updated table.
   renderRanking();
 }
 
 function renderRanking() {
   const tbody = document.querySelector("#rankingTable tbody");
   tbody.innerHTML = "";
-  const sorted = Object.entries(videosData).sort((a,b) => b[1].totalScore - a[1].totalScore);
-  sorted.forEach(([id,v],i) => {
+  const sorted = Object.values(videosData).sort((a,b) => b.totalScore - a.totalScore);
+  sorted.forEach((v,i) => {
     const tr = document.createElement("tr");
     if(i===0) tr.classList.add("top1");
     else if(i===1) tr.classList.add("top2");
@@ -155,10 +173,10 @@ function renderRanking() {
     tr.innerHTML = `
       <td>${i+1}</td>
       <td>${v.title}</td>
-      <td>${v.upvotes}</td>
-      <td>${v.upvotePoints}</td>
-      <td>${v.votePoints}</td>
-      <td>${v.totalScore}</td>
+      <td>${v.upvotes || 0}</td>
+      <td>${v.upvotePoints || 0}</td>
+      <td>${v.votePoints || 0}</td>
+      <td>${v.totalScore || 0}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -199,7 +217,6 @@ resetButton.addEventListener('click', async () => {
     alert("Failed to reset votes. Check the console for errors.");
   }
 });
-
 </script>
 </body>
 </html>
