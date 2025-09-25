@@ -52,6 +52,60 @@
 </form>
 <iframe name="hiddenIframe" style="display:none;"></iframe>
 
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
+  authDomain: "rotm-2a088.firebaseapp.com",
+  projectId: "rotm-2a088",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+async function loadVideos() {
+  const videoGrid = document.getElementById("videoGrid");
+  const rankingList = document.getElementById("rankingList");
+  const snapshot = await getDocs(collection(db, "videos"));
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    // add to grid
+    const card = document.createElement("div");
+    card.className = "video-card";
+    card.innerHTML = `<a href="${data.url}" target="_blank">${data.title} (Upvotes: ${data.upvotes})</a>`;
+    videoGrid.appendChild(card);
+
+    // add to ranking
+    const li = document.createElement("li");
+    li.textContent = data.title;
+    li.dataset.id = doc.id;
+    rankingList.appendChild(li);
+  });
+
+  Sortable.create(rankingList, { animation:150 });
+}
+
+document.getElementById("submitBtn").addEventListener("click", async () => {
+  const rankingList = document.getElementById("rankingList");
+  const top3 = [...rankingList.children].slice(0,3).map(li => li.dataset.id);
+
+  await addDoc(collection(db, "votes"), {
+    userId: "anon_" + Math.floor(Math.random()*10000),
+    rank1: top3[0]||null,
+    rank2: top3[1]||null,
+    rank3: top3[2]||null,
+    timestamp: serverTimestamp()
+  });
+
+  document.getElementById("responseMsg").innerText = "Vote submitted!";
+});
+
+loadVideos();
+</script>
+
+  
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
 let posts = [];
