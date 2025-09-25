@@ -18,18 +18,28 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 #resetButton { background-color: #c0392b; color: white; border: none; }
 .tab { display:none; }
 .tab.active { display:block; }
-#authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
+#authBox { text-align:center; margin-top:50px; }
+#authBox button { background:#4285F4; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; }
+#authStatus { margin-top:15px; font-size:16px; }
 </style>
 </head>
 <body>
 <h1>ROTM Admin Dashboard</h1>
-<div id="authStatus">Checking authentication...</div>
 
+<!-- Auth UI -->
+<div id="authBox">
+  <h2>Admin Login</h2>
+  <button id="loginBtn">Sign in with Google</button>
+  <div id="authStatus">Not signed in</div>
+</div>
+
+<!-- Admin Content -->
 <div id="adminContent" style="display:none;">
   <div class="tab-buttons">
     <button id="scoresTabBtn">Scores</button>
     <button id="votesTabBtn">Detailed Votes</button>
     <button id="resetButton">Reset All Votes</button>
+    <button onclick="logout()">Logout</button>
   </div>
 
   <div id="scoresTab" class="tab active">
@@ -67,37 +77,49 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
+// --- Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
   authDomain: "rotm-2a088.firebaseapp.com",
   projectId: "rotm-2a088"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
+// --- DOM elements
+const loginBtn = document.getElementById("loginBtn");
 const authStatus = document.getElementById("authStatus");
+const authBox = document.getElementById("authBox");
 const adminContent = document.getElementById("adminContent");
 
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    authStatus.innerText = "Please sign in with your Google account...";
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (e) {
-      console.error("Login failed", e);
-      authStatus.innerText = "Login required. Refresh to try again.";
-      return;
-    }
-  } else {
-    // At this point Firestore rules enforce admin-only reads
-    authStatus.innerText = "Signed in as " + user.email;
+// --- Login/logout
+loginBtn.addEventListener("click", async () => {
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    console.error("Login failed", e);
+    authStatus.innerText = "Login failed. Try again.";
+  }
+});
+
+window.logout = async () => {
+  await signOut(auth);
+};
+
+// --- Auth listener
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    authBox.style.display = "none";
     adminContent.style.display = "block";
     initDashboard();
+  } else {
+    adminContent.style.display = "none";
+    authBox.style.display = "block";
+    authStatus.innerText = "Not signed in";
   }
 });
 
