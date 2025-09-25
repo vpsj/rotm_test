@@ -73,43 +73,108 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Tabs logic
+// Tabs
 const scoresTabBtn = document.getElementById("scoresTabBtn");
 const votesTabBtn = document.getElementById("votesTabBtn");
 const scoresTab = document.getElementById("scoresTab");
 const votesTab = document.getElementById("votesTab");
 
-scoresTabBtn.addEventListener("click", ()=>{scoresTab.classList.add("active"); votesTab.classList.remove("active");});
-votesTabBtn.addEventListener("click", ()=>{votesTab.classList.add("active"); scoresTab.classList.remove("active");});
+scoresTabBtn.addEventListener("click", () => { scoresTab.classList.add("active"); votesTab.classList.remove("active"); });
+votesTabBtn.addEventListener("click", () => { votesTab.classList.add("active"); scoresTab.classList.remove("active"); });
 
-// Real-time listener for videos and votes
+// Firestore collections
 const videosCol = collection(db, "videos");
 const votesCol = collection(db, "votes");
 
 let videosData = {};
 let votesData = [];
+let videosLoaded = false;
+let votesLoaded = false;
 
-onSnapshot(videosCol, snapshot=>{
-  snapshot.docs.forEach(doc=>{
-    videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0 };
+// Listen for videos
+onSnapshot(videosCol, snapshot => {
+  videosData = {};
+  snapshot.docs.forEach(doc => {
+    videosData[doc.id] = { ...doc.data(), votePoints: 0, upvotePoints: 0 };
   });
-  calculateScores();
+  videosLoaded = true;
+  if(votesLoaded) calculateScores();
 });
 
-onSnapshot(votesCol, snapshot=>{
-  votesData = snapshot.docs.map(doc=>({ id: doc.id, ...doc.data() }));
-  calculateScores();
+// Listen for votes
+onSnapshot(votesCol, snapshot => {
+  votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  votesLoaded = true;
+  if(videosLoaded) calculateScores();
   renderVotes();
 });
 
-// Scoring logic
+// Calculate scores
 function calculateScores() {
-  if(!votesData || !videosData) return;
+  if(!videosData || Object.keys(videosData).length === 0) return;
 
-  // Reset vote points
-  Object.values(videosData).forEach(v=>v.votePoints=0);
+  // Reset votePoints
+  Object.values(videosData).forEach(v => v.votePoints = 0);
 
-  // Calculate vote points
-  votesData.forEach(vote=>{
+  // Vote points
+  votesData.forEach(vote => {
     if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
-    if(vote.rank2 && videosData[vote.rank2]) videosData[vo]()
+    if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
+    if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
+  });
+
+  // Upvote points: lowest = 10, next = 20, ... highest
+  const sortedByUpvotes = Object.values(videosData).slice().sort((a,b) => a.upvotes - b.upvotes);
+  const step = 10;
+  sortedByUpvotes.forEach((v,i) => v.upvotePoints = step * (i+1));
+
+  // Total score
+  Object.values(videosData).forEach(v => v.totalScore = v.votePoints + v.upvotePoints);
+
+  renderRanking();
+}
+
+// Render ranking table
+function renderRanking() {
+  const tbody = document.querySelector("#rankingTable tbody");
+  tbody.innerHTML = "";
+  const sorted = Object.entries(videosData).sort((a,b) => b[1].totalScore - a[1].totalScore);
+  sorted.forEach(([id,v],i) => {
+    const tr = document.createElement("tr");
+    if(i===0) tr.classList.add("top1");
+    else if(i===1) tr.classList.add("top2");
+    else if(i===2) tr.classList.add("top3");
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>${v.title}</td>
+      <td>${v.upvotes}</td>
+      <td>${v.upvotePoints}</td>
+      <td>${v.votePoints}</td>
+      <td>${v.totalScore}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// Render detailed votes table
+function renderVotes() {
+  const tbody = document.querySelector("#votesTable tbody");
+  tbody.innerHTML = "";
+  if(!votesData || votesData.length === 0) return;
+
+  votesData.forEach(v => {
+    const tr = document.createElement("tr");
+    const ts = v.timestamp && v.timestamp.seconds ? new Date(v.timestamp.seconds * 1000).toLocaleString() : "";
+    tr.innerHTML = `
+      <td>${v.userId || ""}</td>
+      <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
+      <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
+      <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
+      <td>${ts}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
