@@ -1,0 +1,12 @@
+// pseudo-code logic
+const videoScores = {}; 
+videos.forEach(v => videoScores[v.id] = { title: v.title, upvotes: v.upvotes, voteScore: 0 });
+
+votes.forEach(vote => {
+  if(vote.rank1) videoScores[vote.rank1].voteScore += 100;
+  if(vote.rank2) videoScores[vote.rank2].voteScore += 50;
+  if(vote.rank3) videoScores[vote.rank3].voteScore += 25;
+});
+
+// compute totalScore = upvotes + voteScore
+// sort descending
