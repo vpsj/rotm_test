@@ -181,21 +181,13 @@ function initDashboard() {
   let previousOrder = [];
 
 function renderRanking() {
-  const tbody = document.querySelector("#rankingTable tbody");
-  const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
-
-  // Record current positions
-  const firstRects = {};
-  Array.from(tbody.children).forEach(tr => {
-    firstRects[tr.dataset.id] = tr.getBoundingClientRect();
-  });
-
-  // Create a document fragment with new order
-  const fragment = document.createDocumentFragment();
-  sorted.forEach(([id,v], i) => {
-    let tr = tbody.querySelector(`tr[data-id="${id}"]`);
-    if(!tr){
-      tr = document.createElement("tr");
+  if(document.visibilityState !== "visible"){
+    // If tab is not active, just render instantly
+    const tbody = document.querySelector("#rankingTable tbody");
+    tbody.innerHTML = "";
+    const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
+    sorted.forEach(([id,v], i) => {
+      const tr = document.createElement("tr");
       tr.dataset.id = id;
       tr.innerHTML = `
         <td>${i+1}</td>
@@ -205,27 +197,47 @@ function renderRanking() {
         <td>${v.votePoints || 0}</td>
         <td>${v.totalScore || 0}</td>
       `;
-      fragment.appendChild(tr);
-    } else {
-      tr.innerHTML = `
-        <td>${i+1}</td>
-        <td>${v.title}</td>
-        <td>${v.upvotes || 0}</td>
-        <td>${v.upvotePoints || 0}</td>
-        <td>${v.votePoints || 0}</td>
-        <td>${v.totalScore || 0}</td>
-      `;
-      fragment.appendChild(tr);
-    }
+      tr.classList.remove("top1","top2","top3");
+      if(i===0) tr.classList.add("top1");
+      else if(i===1) tr.classList.add("top2");
+      else if(i===2) tr.classList.add("top3");
+      tbody.appendChild(tr);
+    });
+    return;
+  }
 
-    // Top 3 styling
+  const tbody = document.querySelector("#rankingTable tbody");
+  const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
+
+  // Save current positions
+  const firstRects = {};
+  Array.from(tbody.children).forEach(tr => {
+    firstRects[tr.dataset.id] = tr.getBoundingClientRect();
+  });
+
+  // Build fragment in new order
+  const fragment = document.createDocumentFragment();
+  sorted.forEach(([id,v], i) => {
+    let tr = tbody.querySelector(`tr[data-id="${id}"]`);
+    if(!tr){
+      tr = document.createElement("tr");
+      tr.dataset.id = id;
+    }
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>${v.title}</td>
+      <td>${v.upvotes || 0}</td>
+      <td>${v.upvotePoints || 0}</td>
+      <td>${v.votePoints || 0}</td>
+      <td>${v.totalScore || 0}</td>
+    `;
     tr.classList.remove("top1","top2","top3");
     if(i===0) tr.classList.add("top1");
     else if(i===1) tr.classList.add("top2");
     else if(i===2) tr.classList.add("top3");
+    fragment.appendChild(tr);
   });
 
-  // Replace tbody content
   tbody.innerHTML = "";
   tbody.appendChild(fragment);
 
@@ -238,12 +250,20 @@ function renderRanking() {
       tr.style.transition = "none";
       tr.style.transform = `translateY(${invert}px)`;
       requestAnimationFrame(() => {
-        tr.style.transition = "transform 0.5s ease";
+        tr.style.transition = "transform 1.8s cubic-bezier(0.25, 1, 0.5, 1)"; // slow + dramatic
         tr.style.transform = "";
       });
     }
   });
 }
+
+// Optional: trigger animation when switching to tab
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible"){
+    renderRanking(); // re-render to animate changes that happened while away
+  }
+});
+
 
   function renderVotes() {
     const tbody = document.querySelector("#votesTable tbody");
