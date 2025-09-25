@@ -15,7 +15,7 @@
   #rankingList li.top1 { background:#d4af37; color:#111; font-weight:bold; }
   #rankingList li.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
   #rankingList li.top3 { background:#cd7f32; color:#111; font-weight:bold; }
-  #submitBtn { margin-top:20px; padding:10px 20px; font-size:16px; display:block; margin:auto; }
+  #submitBtn { margin-top:20px; padding:10px 20px; font-size:16px; display:block; margin:auto; cursor:pointer; }
   #responseMsg { text-align:center; font-weight:bold; margin-top:20px; }
   #hiddenGoogleForm { display:none; }
   .judge-criteria { max-width:600px; margin:auto; }
@@ -23,6 +23,7 @@
 </style>
 </head>
 <body>
+
 <h1>Vote for Your Top 3 Favorite Videos</h1>
 <p>Watch the videos below, then drag the titles to rank your top 3.</p>
 
@@ -36,6 +37,7 @@
 </div>
 
 <div class="video-grid" id="videoGrid"></div>
+
 <div id="rankingSection">
   <h2>Drag to Rank Top 3</h2>
   <ul id="rankingList"></ul>
@@ -43,18 +45,18 @@
   <p id="responseMsg"></p>
 </div>
 
-<!-- Hidden Google Form --> 
-<form id="hiddenGoogleForm" action="https://docs.google.com/forms/d/1wUIPXtUV5HqQtNMwfj5D4Kk0MGMsQRMvOnWLfOD8aIA/formResponse" method="POST" target="hiddenIframe"> 
-<input type="text" name="entry.840683232" id="field1" /> 
-<input type="text" name="entry.1808098160" id="field2" /> 
-<input type="text" name="entry.1134855181" id="field3" /> 
-<input type="submit" /> 
+<!-- Hidden Google Form -->
+<form id="hiddenGoogleForm" action="https://docs.google.com/forms/d/1wUIPXtUV5HqQtNMwfj5D4Kk0MGMsQRMvOnWLfOD8aIA/formResponse" method="POST" target="hiddenIframe">
+  <input type="text" name="entry.840683232" id="field1" /> 
+  <input type="text" name="entry.1808098160" id="field2" /> 
+  <input type="text" name="entry.1134855181" id="field3" /> 
 </form>
 <iframe name="hiddenIframe" style="display:none;"></iframe>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import Sortable from "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/modular/sortable.esm.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
@@ -65,32 +67,72 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-async function loadVideos() {
-  const videoGrid = document.getElementById("videoGrid");
-  const rankingList = document.getElementById("rankingList");
-  const snapshot = await getDocs(collection(db, "videos"));
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    // add to grid
-    const card = document.createElement("div");
-    card.className = "video-card";
-    card.innerHTML = `<a href="${data.url}" target="_blank">${data.title} (Upvotes: ${data.upvotes})</a>`;
-    videoGrid.appendChild(card);
+const videoGrid = document.getElementById("videoGrid");
+const rankingList = document.getElementById("rankingList");
 
-    // add to ranking
-    const li = document.createElement("li");
-    li.textContent = data.title;
-    li.dataset.id = doc.id;
-    rankingList.appendChild(li);
+// Helper to update top 3 styling
+function updateTop3Styling() {
+  [...rankingList.children].forEach((li, i) => {
+    li.classList.remove("top1","top2","top3");
+    const text = li.textContent.replace(/^\d+\.\s*/, "");
+    if(i===0){ li.classList.add("top1"); li.textContent=`1. ${text}`; }
+    else if(i===1){ li.classList.add("top2"); li.textContent=`2. ${text}`; }
+    else if(i===2){ li.classList.add("top3"); li.textContent=`3. ${text}`; }
+    else li.textContent=text;
   });
-
-  Sortable.create(rankingList, { animation:150 });
 }
 
-document.getElementById("submitBtn").addEventListener("click", async () => {
-  const rankingList = document.getElementById("rankingList");
-  const top3 = [...rankingList.children].slice(0,3).map(li => li.dataset.id);
+// Load posts from GitHub JSON
+async function loadPosts() {
+  try {
+    const res = await fetch("https://raw.githubusercontent.com/vpsj/rotm_test/main/links.json");
+    const urls = await res.json();
+    
+    const embedPromises = urls.map(async (url, i) => {
+      const postId = "video"+(i+1);
 
+      // Reddit card
+      const cardHTML = `<div class="video-card"><blockquote class="reddit-card"><a href="${url}">Loading title...</a></blockquote></div>`;
+      videoGrid.insertAdjacentHTML("beforeend", cardHTML);
+
+      // Fetch Reddit data for title and upvotes
+      try {
+        const jsonRes = await fetch(url+".json");
+        const json = await jsonRes.json();
+        const data = json[0].data.children[0].data;
+        const title = data.title || url;
+
+        const li = document.createElement("li");
+        li.textContent = title;
+        li.setAttribute("data-id", postId);
+        rankingList.appendChild(li);
+      } catch(e) {
+        console.error("Failed to fetch Reddit data:", url, e);
+        const li = document.createElement("li");
+        li.textContent = url;
+        li.setAttribute("data-id", postId);
+        rankingList.appendChild(li);
+      }
+    });
+
+    await Promise.all(embedPromises);
+
+    Sortable.create(rankingList, {
+      animation:150,
+      onEnd:updateTop3Styling
+    });
+    updateTop3Styling();
+
+  } catch(err) {
+    console.error("Failed to load posts:", err);
+  }
+}
+
+// Submit vote
+document.getElementById("submitBtn").addEventListener("click", async () => {
+  const top3 = [...rankingList.children].slice(0,3).map(li => li.textContent.replace(/^\d+\.\s*/,""));
+
+  // Firebase
   await addDoc(collection(db, "votes"), {
     userId: "anon_" + Math.floor(Math.random()*10000),
     rank1: top3[0]||null,
@@ -99,76 +141,13 @@ document.getElementById("submitBtn").addEventListener("click", async () => {
     timestamp: serverTimestamp()
   });
 
-  document.getElementById("responseMsg").innerText = "Vote submitted!";
-});
-
-loadVideos();
-</script>
-
-  
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script>
-let posts = [];
-const videoGrid = document.getElementById("videoGrid");
-const rankingList = document.getElementById("rankingList");
-window.redditUpvotes = {}; // store upvotes
-
-// Fetch links.json from GitHub
-async function loadPosts() {
-  const res = await fetch("https://raw.githubusercontent.com/vpsj/rotm_test/main/links.json");
-  const urls = await res.json();
-  posts = urls.map((url, i)=>({id:"video"+(i+1), url}));
-
-  const embedPromises = [];
-
-  for (const post of posts){
-    // Reddit embed card
-    const cardHTML = `<div class="video-card"><blockquote class="reddit-card"><a href="${post.url}">Loading title...</a></blockquote></div>`;
-    videoGrid.insertAdjacentHTML("beforeend", cardHTML);
-
-    const fetchPromise = fetch(post.url+".json")
-      .then(res=>res.json())
-      .then(json=>{
-        const data = json[0].data.children[0].data;
-        const title = data.title || post.url;
-        const upvotes = data.ups || 10;
-        window.redditUpvotes[post.url] = upvotes;
-
-        const li = document.createElement("li");
-        li.textContent = title;
-        li.setAttribute("data-id", post.id);
-        rankingList.appendChild(li);
-      })
-      .catch(err=>{console.error("Failed to fetch:", post.url, err); window.redditUpvotes[post.url]=10; });
-    
-    embedPromises.push(fetchPromise);
-  }
-
-  await Promise.all(embedPromises);
-  window.__REDDIT_EMBED__?.onDOMContentLoaded?.();
-
-  Sortable.create(rankingList, { animation:150, onEnd:updateTop3Styling });
-  updateTop3Styling();
-}
-
-function updateTop3Styling() {
-  [...rankingList.children].forEach((li,i)=>{
-    li.classList.remove("top1","top2","top3");
-    const text = li.textContent.replace(/^\d+\.\s*/,"");
-    if(i===0){ li.classList.add("top1"); li.textContent=`1. ${text}`; }
-    else if(i===1){ li.classList.add("top2"); li.textContent=`2. ${text}`; }
-    else if(i===2){ li.classList.add("top3"); li.textContent=`3. ${text}`; }
-    else li.textContent=text;
-  });
-}
-
-document.getElementById("submitBtn").addEventListener("click", ()=>{
-  const top3 = [...rankingList.children].slice(0,3).map(li=>li.textContent.replace(/^\d+\.\s*/,""));
-  document.getElementById("field1").value=top3[0]||"";
-  document.getElementById("field2").value=top3[1]||"";
-  document.getElementById("field3").value=top3[2]||"";
+  // Google Form
+  document.getElementById("field1").value = top3[0]||"";
+  document.getElementById("field2").value = top3[1]||"";
+  document.getElementById("field3").value = top3[2]||"";
   document.getElementById("hiddenGoogleForm").submit();
-  document.getElementById("responseMsg").innerText="Your vote has been submitted. Thank you!";
+
+  document.getElementById("responseMsg").innerText = "Your vote has been submitted. Thank you!";
 });
 
 loadPosts();
