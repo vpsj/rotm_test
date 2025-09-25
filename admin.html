@@ -77,53 +77,41 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
-// --- Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
   authDomain: "rotm-2a088.firebaseapp.com",
   projectId: "rotm-2a088"
 };
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// --- DOM elements
-const loginBtn = document.getElementById("loginBtn");
 const authStatus = document.getElementById("authStatus");
-const authBox = document.getElementById("authBox");
 const adminContent = document.getElementById("adminContent");
 
-// --- Login/logout
-loginBtn.addEventListener("click", async () => {
-  try {
-    await signInWithPopup(auth, provider);
-  } catch (e) {
-    console.error("Login failed", e);
-    authStatus.innerText = "Login failed. Try again.";
-  }
-});
-
-window.logout = async () => {
-  await signOut(auth);
-};
-
-// --- Auth listener
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    authBox.style.display = "none";
+// ---------------- AUTH ----------------
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    authStatus.innerText = "Please sign in with your Google account...";
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      console.error("Login failed", e);
+      authStatus.innerText = "Login required. Refresh to try again.";
+      return;
+    }
+  } else {
+    authStatus.innerText = "Signed in as " + user.email;
     adminContent.style.display = "block";
     initDashboard();
-  } else {
-    adminContent.style.display = "none";
-    authBox.style.display = "block";
-    authStatus.innerText = "Not signed in";
   }
 });
 
-// ---------------- Dashboard Logic ----------------
+// ---------------- DASHBOARD ----------------
 function initDashboard() {
   const scoresTabBtn = document.getElementById("scoresTabBtn");
   const votesTabBtn = document.getElementById("votesTabBtn");
@@ -141,7 +129,9 @@ function initDashboard() {
   let votesData = [];
   let videosLoaded = false;
   let votesLoaded = false;
+  let rankingNeedsRender = false;
 
+  // ---------------- FIRESTORE LISTENERS ----------------
   onSnapshot(videosCol, snapshot => {
     videosData = {};
     snapshot.docs.forEach(doc => {
@@ -149,15 +139,35 @@ function initDashboard() {
     });
     videosLoaded = true;
     if(votesLoaded) calculateScores();
+    scheduleRenderRanking();
   });
 
   onSnapshot(votesCol, snapshot => {
     votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     votesLoaded = true;
     if(videosLoaded) calculateScores();
-    renderVotes();
+    renderVotes(); // votes table doesn't need animation
+    scheduleRenderRanking();
   });
 
+  // ---------------- VISIBILITY HANDLING ----------------
+  function scheduleRenderRanking() {
+    if(document.visibilityState === "visible") {
+      renderRanking();
+      rankingNeedsRender = false;
+    } else {
+      rankingNeedsRender = true; // defer animation until tab active
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible" && rankingNeedsRender){
+      renderRanking();
+      rankingNeedsRender = false;
+    }
+  });
+
+  // ---------------- SCORING ----------------
   function calculateScores() {
     if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
 
@@ -174,21 +184,27 @@ function initDashboard() {
     sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(i+1); });
 
     Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
-
-    renderRanking();
   }
 
-  let previousOrder = [];
-
-function renderRanking() {
-  if(document.visibilityState !== "visible"){
-    // If tab is not active, just render instantly
+  // ---------------- ANIMATED RANKING ----------------
+  function renderRanking() {
     const tbody = document.querySelector("#rankingTable tbody");
-    tbody.innerHTML = "";
+    const oldPositions = Array.from(tbody.children).map(row => row.getBoundingClientRect());
+
     const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
+
+    // Create rows if empty
+    while(tbody.children.length < sorted.length) {
+      tbody.appendChild(document.createElement("tr"));
+    }
+
     sorted.forEach(([id,v], i) => {
-      const tr = document.createElement("tr");
-      tr.dataset.id = id;
+      const tr = tbody.children[i];
+      tr.className = "";
+      if(i===0) tr.classList.add("top1");
+      else if(i===1) tr.classList.add("top2");
+      else if(i===2) tr.classList.add("top3");
+
       tr.innerHTML = `
         <td>${i+1}</td>
         <td>${v.title}</td>
@@ -197,74 +213,25 @@ function renderRanking() {
         <td>${v.votePoints || 0}</td>
         <td>${v.totalScore || 0}</td>
       `;
-      tr.classList.remove("top1","top2","top3");
-      if(i===0) tr.classList.add("top1");
-      else if(i===1) tr.classList.add("top2");
-      else if(i===2) tr.classList.add("top3");
-      tbody.appendChild(tr);
     });
-    return;
+
+    // FLIP animation
+    const newPositions = Array.from(tbody.children).map(row => row.getBoundingClientRect());
+    tbody.children.forEach((tr, i) => {
+      const dx = oldPositions[i] ? oldPositions[i].left - newPositions[i].left : 0;
+      const dy = oldPositions[i] ? oldPositions[i].top - newPositions[i].top : 0;
+      if(dx || dy){
+        tr.style.transition = "none";
+        tr.style.transform = `translate(${dx}px, ${dy}px)`;
+        requestAnimationFrame(()=>{
+          tr.style.transition = "transform 1.2s ease-in-out";
+          tr.style.transform = "";
+        });
+      }
+    });
   }
 
-  const tbody = document.querySelector("#rankingTable tbody");
-  const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
-
-  // Save current positions
-  const firstRects = {};
-  Array.from(tbody.children).forEach(tr => {
-    firstRects[tr.dataset.id] = tr.getBoundingClientRect();
-  });
-
-  // Build fragment in new order
-  const fragment = document.createDocumentFragment();
-  sorted.forEach(([id,v], i) => {
-    let tr = tbody.querySelector(`tr[data-id="${id}"]`);
-    if(!tr){
-      tr = document.createElement("tr");
-      tr.dataset.id = id;
-    }
-    tr.innerHTML = `
-      <td>${i+1}</td>
-      <td>${v.title}</td>
-      <td>${v.upvotes || 0}</td>
-      <td>${v.upvotePoints || 0}</td>
-      <td>${v.votePoints || 0}</td>
-      <td>${v.totalScore || 0}</td>
-    `;
-    tr.classList.remove("top1","top2","top3");
-    if(i===0) tr.classList.add("top1");
-    else if(i===1) tr.classList.add("top2");
-    else if(i===2) tr.classList.add("top3");
-    fragment.appendChild(tr);
-  });
-
-  tbody.innerHTML = "";
-  tbody.appendChild(fragment);
-
-  // Animate using FLIP
-  Array.from(tbody.children).forEach(tr => {
-    const firstRect = firstRects[tr.dataset.id];
-    if(firstRect){
-      const lastRect = tr.getBoundingClientRect();
-      const invert = firstRect.top - lastRect.top;
-      tr.style.transition = "none";
-      tr.style.transform = `translateY(${invert}px)`;
-      requestAnimationFrame(() => {
-        tr.style.transition = "transform 1.8s cubic-bezier(0.25, 1, 0.5, 1)"; // slow + dramatic
-        tr.style.transform = "";
-      });
-    }
-  });
-}
-
-// Optional: trigger animation when switching to tab
-document.addEventListener("visibilitychange", () => {
-  if(document.visibilityState === "visible"){
-    renderRanking(); // re-render to animate changes that happened while away
-  }
-});
-
-
+  // ---------------- RENDER VOTES ----------------
   function renderVotes() {
     const tbody = document.querySelector("#votesTable tbody");
     tbody.innerHTML = "";
@@ -285,6 +252,7 @@ document.addEventListener("visibilitychange", () => {
       });
   }
 
+  // ---------------- RESET BUTTON ----------------
   resetButton.addEventListener('click', async () => {
     if(!confirm("Delete ALL votes permanently?")) return;
     try {
