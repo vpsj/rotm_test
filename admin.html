@@ -178,15 +178,25 @@ function initDashboard() {
     renderRanking();
   }
 
-  function renderRanking() {
-    const tbody = document.querySelector("#rankingTable tbody");
-    tbody.innerHTML = "";
-    const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
-    sorted.forEach(([id,v],i)=>{
-      const tr = document.createElement("tr");
-      if(i===0) tr.classList.add("top1");
-      else if(i===1) tr.classList.add("top2");
-      else if(i===2) tr.classList.add("top3");
+  let previousOrder = [];
+
+function renderRanking() {
+  const tbody = document.querySelector("#rankingTable tbody");
+  const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
+
+  // Record current positions
+  const firstRects = {};
+  Array.from(tbody.children).forEach(tr => {
+    firstRects[tr.dataset.id] = tr.getBoundingClientRect();
+  });
+
+  // Create a document fragment with new order
+  const fragment = document.createDocumentFragment();
+  sorted.forEach(([id,v], i) => {
+    let tr = tbody.querySelector(`tr[data-id="${id}"]`);
+    if(!tr){
+      tr = document.createElement("tr");
+      tr.dataset.id = id;
       tr.innerHTML = `
         <td>${i+1}</td>
         <td>${v.title}</td>
@@ -195,9 +205,45 @@ function initDashboard() {
         <td>${v.votePoints || 0}</td>
         <td>${v.totalScore || 0}</td>
       `;
-      tbody.appendChild(tr);
-    });
-  }
+      fragment.appendChild(tr);
+    } else {
+      tr.innerHTML = `
+        <td>${i+1}</td>
+        <td>${v.title}</td>
+        <td>${v.upvotes || 0}</td>
+        <td>${v.upvotePoints || 0}</td>
+        <td>${v.votePoints || 0}</td>
+        <td>${v.totalScore || 0}</td>
+      `;
+      fragment.appendChild(tr);
+    }
+
+    // Top 3 styling
+    tr.classList.remove("top1","top2","top3");
+    if(i===0) tr.classList.add("top1");
+    else if(i===1) tr.classList.add("top2");
+    else if(i===2) tr.classList.add("top3");
+  });
+
+  // Replace tbody content
+  tbody.innerHTML = "";
+  tbody.appendChild(fragment);
+
+  // Animate using FLIP
+  Array.from(tbody.children).forEach(tr => {
+    const firstRect = firstRects[tr.dataset.id];
+    if(firstRect){
+      const lastRect = tr.getBoundingClientRect();
+      const invert = firstRect.top - lastRect.top;
+      tr.style.transition = "none";
+      tr.style.transform = `translateY(${invert}px)`;
+      requestAnimationFrame(() => {
+        tr.style.transition = "transform 0.5s ease";
+        tr.style.transform = "";
+      });
+    }
+  });
+}
 
   function renderVotes() {
     const tbody = document.querySelector("#votesTable tbody");
