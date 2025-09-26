@@ -12,9 +12,8 @@ th, td { border:1px solid #555; padding:10px; text-align:center; }
 th { background:#333; }
 /* Animation CSS for ranking movement */
 #rankingTable tbody tr {
-    /* Apply transition to properties that change when rank updates */
     transition: all 0.7s ease-in-out; 
-    position: relative; /* Needed for potential movement/reordering visual */
+    position: relative; 
 }
 tr.top1 { background:#d4af37; color:#111; font-weight:bold; }
 tr.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
@@ -28,8 +27,14 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 .tab.active { display:block; }
 #authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 #loginBtn { display:block; margin:20px auto; padding:10px 20px; font-size:16px; cursor:pointer; }
-/* Style for the chart container */
 #pieChartContainer { margin-top: 30px; padding: 20px; background: #222; border-radius: 5px; }
+/* Dramatic animation for ranking movement */
+@keyframes rankMove {
+    0% { transform: translateY(-30px); opacity: 0.5; }
+    50% { transform: translateY(15px); opacity: 1; }
+    100% { transform: translateY(0); opacity: 1; }
+}
+.rank-move { animation: rankMove 0.8s ease-in-out; }
 </style>
 </head>
 <body>
@@ -108,14 +113,10 @@ const authStatus = document.getElementById("authStatus");
 const adminContent = document.getElementById("adminContent");
 const loginBtn = document.getElementById("loginBtn");
 
-// ---------------- Authentication Logic (Original, UNCHANGED) ----------------
+// ---------------- Authentication Logic (UNCHANGED) ----------------
 loginBtn.addEventListener("click", async () => {
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (e) {
-      console.error("Login failed", e);
-      authStatus.innerText = "Login failed. Try again.";
-    }
+    try { await signInWithPopup(auth, provider); } 
+    catch (e) { console.error("Login failed", e); authStatus.innerText = "Login failed. Try again."; }
 });
 
 onAuthStateChanged(auth, (user) => {
@@ -137,7 +138,6 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // ---------------- Dashboard Logic ----------------
-// Global state variables for data
 let videosData = {};
 let votesData = [];
 let videosLoaded = false;
@@ -151,106 +151,78 @@ function initDashboard() {
     const scoresTab = document.getElementById("scoresTab");
     const votesTab = document.getElementById("votesTab");
     const resetButton = document.getElementById("resetButton");
-    const exportCsvBtn = document.getElementById("exportCsvBtn"); // New button
+    const exportCsvBtn = document.getElementById("exportCsvBtn");
 
+    // Tab switching logic with animation trigger
     scoresTabBtn.addEventListener("click", () => { 
         scoresTab.classList.add("active"); 
         votesTab.classList.remove("active"); 
+        triggerRankingAnimation();
     });
     votesTabBtn.addEventListener("click", () => { 
         votesTab.classList.add("active"); 
         scoresTab.classList.remove("active");
-        drawRank1PieChart(); // Draw chart when votes tab is opened
+        drawRank1PieChart();
     });
-    
-    // --- Firebase Listeners (Original, Minor change to call drawChart) ---
+
+    // Animate rankings when tab gains focus
+    window.addEventListener('focus', () => { if(scoresTab.classList.contains('active')) triggerRankingAnimation(); });
+
+    // Firebase listeners
     onSnapshot(videosCol, snapshot => {
         videosData = {};
-        snapshot.docs.forEach(doc => {
-            videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0, rank1Votes:0 }; // Added rank1Votes
-        });
-        videosLoaded = true;
-        if(votesLoaded) calculateScores();
+        snapshot.docs.forEach(doc => { videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0, rank1Votes:0 }; });
+        videosLoaded = true; if(votesLoaded) calculateScores();
     });
 
     onSnapshot(votesCol, snapshot => {
         votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        votesLoaded = true;
-        if(videosLoaded) calculateScores();
-        renderVotes();
+        votesLoaded = true; if(videosLoaded) calculateScores(); renderVotes();
     });
 
-    // --- Core Logic (Original, Minor change to track rank1Votes) ---
+    // Score calculations
     function calculateScores() {
         if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
-
-        Object.values(videosData).forEach(v => { v.votePoints=0; v.upvotePoints=0; v.totalScore=0; v.rank1Votes=0; }); // Reset rank1Votes
+        Object.values(videosData).forEach(v => { v.votePoints=0; v.upvotePoints=0; v.totalScore=0; v.rank1Votes=0; });
 
         votesData.forEach(vote=>{
             if(vote.rank1 && videosData[vote.rank1]) { 
-                videosData[vote.rank1].votePoints += 100;
-                videosData[vote.rank1].rank1Votes += 1; // Track Rank 1 votes
+                videosData[vote.rank1].votePoints += 100; videosData[vote.rank1].rank1Votes += 1;
             }
             if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
             if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
         });
 
         const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>b[1].upvotes - a[1].upvotes);
-        const step = 10;
-        sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(sortedByUpvotes.length - i); });
+        const step = 10; sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(sortedByUpvotes.length - i); });
 
         Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
-
         renderRanking();
-        drawRank1PieChart(); // Update chart data when scores change
+        drawRank1PieChart();
     }
 
-    // --- Rendering Functions (Original renderVotes and renderRanking, but ranking includes CSS transition) ---
+    // Ranking render with smooth transition
     function renderRanking() {
       const tbody = document.querySelector("#rankingTable tbody");
-      // Use existing IDs for smooth transition after sorting
-      const existingRows = Array.from(tbody.querySelectorAll('tr')).reduce((acc, tr) => {
-          acc[tr.dataset.videoId] = tr;
-          return acc;
-      }, {});
-
-      // Clear existing content safely after getting existing IDs
+      const existingRows = Array.from(tbody.querySelectorAll('tr')).reduce((acc, tr) => { acc[tr.dataset.videoId] = tr; return acc; }, {});
       tbody.innerHTML = "";
-      
       const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
-      
-      sorted.forEach(([id,v],i)=>{
-          let tr = existingRows[id];
-          
-          if (!tr) {
-              // Create new row if it doesn't exist
-              tr = document.createElement("tr");
-              tr.dataset.videoId = id; // Store ID for next update
-              tr.innerHTML = `
-                <td>${i+1}</td>
-                <td>${v.title}</td>
-                <td>${v.upvotes || 0}</td>
-                <td>${v.upvotePoints || 0}</td>
-                <td>${v.votePoints || 0}</td>
-                <td>${v.totalScore || 0}</td>
-              `;
-          } else {
-              // Update existing row content
-              tr.classList.remove("top1", "top2", "top3");
-              tr.querySelector('td:nth-child(1)').textContent = i+1;
-              tr.querySelector('td:nth-child(3)').textContent = v.upvotes || 0;
-              tr.querySelector('td:nth-child(4)').textContent = v.upvotePoints || 0;
-              tr.querySelector('td:nth-child(5)').textContent = v.votePoints || 0;
-              tr.querySelector('td:nth-child(6)').textContent = v.totalScore || 0;
-          }
 
-          // Apply top classes for visual flair
+      sorted.forEach(([id,v],i)=>{
+          let tr = existingRows[id] || document.createElement("tr");
+          tr.dataset.videoId = id;
+          tr.innerHTML = `
+            <td>${i+1}</td>
+            <td>${v.title}</td>
+            <td>${v.upvotes || 0}</td>
+            <td>${v.upvotePoints || 0}</td>
+            <td>${v.votePoints || 0}</td>
+            <td>${v.totalScore || 0}</td>
+          `;
+          tr.classList.remove("top1","top2","top3");
           if(i===0) tr.classList.add("top1");
           else if(i===1) tr.classList.add("top2");
           else if(i===2) tr.classList.add("top3");
-          
-          // Append the row. Since the CSS transition is on `all`, the visual reordering
-          // will trigger a smooth movement if the DOM element moves in the list.
           tbody.appendChild(tr);
       });
     }
@@ -260,122 +232,75 @@ function initDashboard() {
         tbody.innerHTML = "";
         if(!votesData || votesData.length===0 || Object.keys(videosData).length===0) return;
 
-        votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0))
-            .forEach(v=>{
-                const tr = document.createElement("tr");
-                const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
-                tr.innerHTML = `
-                  <td>${v.userId || ""}</td>
-                  <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
-                  <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
-                  <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
-                  <td>${ts}</td>
-                `;
-                tbody.appendChild(tr);
-            });
+        votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0)).forEach(v=>{
+            const tr = document.createElement("tr");
+            const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
+            tr.innerHTML = `
+              <td>${v.userId || ""}</td>
+              <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
+              <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
+              <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
+              <td>${ts}</td>
+            `;
+            tbody.appendChild(tr);
+        });
     }
-    
-    // --- Reset Button (Original) ---
+
+    // Reset votes
     resetButton.addEventListener('click', async () => {
         if(!confirm("Delete ALL votes permanently?")) return;
-        try {
-            const querySnapshot = await getDocs(votesCol);
-            await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref)));
-            alert("All votes reset successfully.");
-        } catch(e) { console.error(e); alert("Failed to reset votes."); }
+        try { const querySnapshot = await getDocs(votesCol); await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref))); alert("All votes reset successfully."); } 
+        catch(e){ console.error(e); alert("Failed to reset votes."); }
     });
 
-    // ---------------- New Feature Logic ----------------
-
-    // 1. Pie Chart Logic (Uses Google Charts)
+    // Draw Rank1 Pie Chart
     function drawRank1PieChart() {
         if (typeof google === 'undefined' || !votesLoaded || Object.keys(videosData).length === 0) return;
-
-        // Prepare data for the chart: [['Video Title', 'Rank 1 Votes'], ...]
         const chartData = [['Video Title', 'Rank 1 Votes']];
         let totalRank1Votes = 0;
-
-        Object.values(videosData).forEach(v => {
-            if (v.rank1Votes > 0) {
-                chartData.push([v.title, v.rank1Votes]);
-                totalRank1Votes += v.rank1Votes;
-            }
-        });
-
-        // Add an 'Unaccounted' slice if total votes don't match the sum
-        const totalVotes = votesData.length;
-        const unaccounted = totalVotes - totalRank1Votes;
-        if (unaccounted > 0) {
-             chartData.push(['Unaccounted/Invalid Votes', unaccounted]);
-        }
-
-        if (chartData.length <= 1) {
-            document.getElementById('rank1PieChart').innerHTML = '<p style="text-align:center;">No Rank 1 votes recorded yet.</p>';
-            return;
-        }
+        Object.values(videosData).forEach(v => { if (v.rank1Votes>0){ chartData.push([v.title,v.rank1Votes]); totalRank1Votes+=v.rank1Votes; }});
+        const unaccounted = votesData.length - totalRank1Votes;
+        if(unaccounted>0) chartData.push(['Unaccounted/Invalid Votes',unaccounted]);
+        if(chartData.length<=1){ document.getElementById('rank1PieChart').innerHTML = '<p style="text-align:center;">No Rank 1 votes recorded yet.</p>'; return; }
 
         const data = google.visualization.arrayToDataTable(chartData);
-
         const options = {
-            title: `Rank 1 Votes Distribution (Total Votes: ${totalVotes})`,
+            title: `Rank 1 Votes Distribution (Total Votes: ${votesData.length})`,
             is3D: true,
-            backgroundColor: '#222', // Match container background
+            backgroundColor: '#222',
             legend: { textStyle: { color: '#fff' } },
             titleTextStyle: { color: '#fff' },
-            colors: ['#d4af37', '#c0c0c0', '#cd7f32', '#3498db', '#9b59b6', '#e74c3c', '#1abc9c', '#f1c40f']
+            colors: ['#d4af37','#c0c0c0','#cd7f32','#3498db','#9b59b6','#e74c3c','#1abc9c','#f1c40f']
         };
-
         const chart = new google.visualization.PieChart(document.getElementById('rank1PieChart'));
         chart.draw(data, options);
     }
-    
     google.charts.load('current', {'packages':['corechart']});
-    // The chart will be drawn upon the first data load and when the tab is switched.
 
-    // 2. CSV Export Logic
+    // CSV export logic
     exportCsvBtn.addEventListener('click', () => {
-        if (votesData.length === 0) {
-            alert("No votes to export.");
-            return;
-        }
-        
-        const header = ["User ID", "Rank 1 (ID)", "Rank 2 (ID)", "Rank 3 (ID)", "Rank 1 (Title)", "Rank 2 (Title)", "Rank 3 (Title)", "Timestamp"];
-        const rows = votesData.map(v => {
-            const rank1Title = videosData[v.rank1]?.title || '';
-            const rank2Title = videosData[v.rank2]?.title || '';
-            const rank3Title = videosData[v.rank3]?.title || '';
-            const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds * 1000).toLocaleString() : '';
-            
-            // Format data for CSV: Quote strings, use comma as separator
-            return [
-                `"${v.userId || ''}"`, 
-                `"${v.rank1 || ''}"`, 
-                `"${v.rank2 || ''}"`, 
-                `"${v.rank3 || ''}"`,
-                `"${rank1Title}"`,
-                `"${rank2Title}"`,
-                `"${rank3Title}"`,
-                `"${ts}"`
-            ].join(',');
+        if(votesData.length===0){ alert("No votes to export."); return; }
+        const header = ["Timestamp","Rank 1","Rank 2","Rank 3"];
+        const rows = votesData.map(v=>{
+            const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : '';
+            return [`"${ts}"`,`"${v.rank1||''}"`,`"${v.rank2||''}"`,`"${v.rank3||''}"`].join(',');
         });
-
         const csvContent = [header.join(','), ...rows].join('\n');
-        
-        // Create a temporary link element to trigger the download
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        
         link.setAttribute('href', url);
-        link.setAttribute('download', 'rotm_votes_export_' + new Date().toISOString().slice(0, 10) + '.csv');
-        link.style.visibility = 'hidden';
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
+        link.setAttribute('download', 'rotm_votes_export_' + new Date().toISOString().slice(0,10) + '.csv');
+        link.style.visibility='hidden';
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
         alert("Votes exported successfully to CSV.");
     });
+
+    // Trigger ranking animation function
+    function triggerRankingAnimation() {
+        const tbody = document.querySelector("#rankingTable tbody");
+        tbody.querySelectorAll('tr').forEach(tr => { tr.classList.remove('rank-move'); void tr.offsetWidth; tr.classList.add('rank-move'); });
+    }
 }
 </script>
 </body>
