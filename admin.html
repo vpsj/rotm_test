@@ -16,18 +16,17 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 .tab-buttons { text-align:center; margin-top:20px; }
 .tab-buttons button { margin:0 5px; }
 #resetButton { background-color: #c0392b; color: white; border: none; }
-#authBox { text-align:center; margin-top:50px; }
-#authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 .tab { display:none; }
 .tab.active { display:block; }
+#authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 #votesPieChart { max-width:600px; margin:20px auto; display:block; }
+#loginBtn { margin-top: 10px; padding: 10px 20px; font-size:16px; cursor:pointer; background:#2c3e50; color:#fff; border:none; }
 </style>
 </head>
 <body>
 
 <h1>ROTM Admin Dashboard</h1>
 <div id="authStatus">Checking authentication...</div>
-
 <div id="authBox">
   <button id="loginBtn">Sign in with Google</button>
 </div>
@@ -73,11 +72,10 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
   </div>
 </div>
 
-<!-- External Libraries -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import Chart from 'https://cdn.jsdelivr.net/npm/chart.js';
 
 const firebaseConfig = {
@@ -92,30 +90,26 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 const authStatus = document.getElementById("authStatus");
-const adminContent = document.getElementById("adminContent");
 const authBox = document.getElementById("authBox");
+const adminContent = document.getElementById("adminContent");
 const loginBtn = document.getElementById("loginBtn");
 
-// ---------------- Authentication ----------------
-loginBtn.addEventListener("click", async () => {
-  try {
-    await signInWithPopup(auth, provider);
-  } catch(e){
-    console.error("Login failed", e);
-    authStatus.innerText = "Login failed. Try again.";
-  }
+loginBtn.addEventListener("click", async ()=>{
+  try { await signInWithPopup(auth, provider); } 
+  catch(e){ console.error(e); alert("Login failed."); }
 });
 
-onAuthStateChanged(auth, user => {
-  if(user){
-    authBox.style.display="none";
+// ---------------- Authentication ----------------
+onAuthStateChanged(auth, async (user) => {
+  if(!user){
+    authStatus.innerText = "Please sign in with Google...";
+    try { await signInWithPopup(auth, provider); } 
+    catch(e){ authStatus.innerText="Login failed. Refresh to try again."; console.error(e); return; }
+  } else {
     authStatus.innerText = "Signed in as " + user.email;
+    authBox.style.display="none";
     adminContent.style.display="block";
     initDashboard();
-  } else {
-    authBox.style.display="block";
-    authStatus.innerText = "Not signed in";
-    adminContent.style.display="none";
   }
 });
 
@@ -142,7 +136,7 @@ function initDashboard(){
   let votesPieChart = null;
   let pendingUpdate = false;
 
-  // Firestore listeners
+  // ---------------- Firestore listeners ----------------
   onSnapshot(videosCol, snapshot => { 
     videosData = {}; 
     snapshot.docs.forEach(doc=>{ videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0 }; });
@@ -157,6 +151,7 @@ function initDashboard(){
     renderVotes();
   });
 
+  // ---------------- Ranking Calculation & Animation ----------------
   function calculateScores(){
     Object.values(videosData).forEach(v=>{ v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
     votesData.forEach(vote=>{
@@ -168,6 +163,7 @@ function initDashboard(){
     const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>a[1].upvotes-b[1].upvotes);
     const step = 10;
     sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(i+1); });
+
     Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
   }
 
@@ -211,12 +207,14 @@ function initDashboard(){
       `;
       tbody.appendChild(tr);
     });
+    // Slow dramatic fade-in
     tbody.querySelectorAll("tr").forEach((tr,i)=>{
       tr.style.opacity=0;
-      setTimeout(()=>{ tr.style.transition="opacity 1.2s"; tr.style.opacity=1; }, i*300);
+      setTimeout(()=>{ tr.style.transition="opacity 1.2s ease-in-out"; tr.style.opacity=1; }, i*300);
     });
   }
 
+  // ---------------- Votes Table & Pie Chart ----------------
   function renderVotes(){
     const tbody = document.querySelector("#votesTable tbody");
     tbody.innerHTML="";
@@ -241,20 +239,21 @@ function initDashboard(){
     const voteCounts = {};
     Object.keys(videosData).forEach(id=>voteCounts[videosData[id].title]=0);
     votesData.forEach(v=>{
-      if(v.rank1 && videosData[v.rank1]) voteCounts[videosData[v.rank1].title]+=1;
-      if(v.rank2 && videosData[v.rank2]) voteCounts[videosData[v.rank2].title]+=0.5;
-      if(v.rank3 && videosData[v.rank3]) voteCounts[videosData[v.rank3].title]+=0.25;
+      if(v.rank1 && videosData[v.rank1]) voteCounts[videosData[v.rank1].title || v.rank1]+=1;
+      if(v.rank2 && videosData[v.rank2]) voteCounts[videosData[v.rank2].title || v.rank2]+=0.5;
+      if(v.rank3 && videosData[v.rank3]) voteCounts[videosData[v.rank3].title || v.rank3]+=0.25;
     });
 
     const data = {
       labels: Object.keys(voteCounts),
-      datasets:[{data:Object.values(voteCounts), backgroundColor:['#d4af37','#c0c0c0','#cd7f32','#444','#666','#888','#aaa']}]
+      datasets:[{data: Object.values(voteCounts), backgroundColor:['#d4af37','#c0c0c0','#cd7f32','#444','#666','#888','#aaa']}]
     };
 
     if(votesPieChart) votesPieChart.destroy();
-    votesPieChart = new Chart(votesPieChartCanvas, {type:'pie', data});
+    votesPieChart = new Chart(votesPieChartCanvas, {type:'pie',data:data});
   }
 
+  // ---------------- Reset Votes ----------------
   resetButton.addEventListener("click", async()=>{
     if(!confirm("Delete ALL votes permanently?")) return;
     try{
@@ -264,6 +263,7 @@ function initDashboard(){
     }catch(e){ console.error(e); alert("Failed to reset votes."); }
   });
 
+  // ---------------- Export CSV ----------------
   exportCSVBtn.addEventListener("click", ()=>{
     if(!votesData.length || !Object.keys(videosData).length) return;
 
@@ -274,12 +274,13 @@ function initDashboard(){
       const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
       csv.push([v.userId||"",v.rank1||"",v.rank2||"",v.rank3||"",ts].join(","));
     });
+
     csv.push("\nVideo Title,Upvotes,Upvote Points,Vote Points,Total Score");
     Object.values(videosData).forEach(v=>{
       csv.push([v.title,v.upvotes||0,v.upvotePoints||0,v.votePoints||0,v.totalScore||0].join(","));
     });
 
-    const blob = new Blob([csv.join("\n")], {type:"text/csv"});
+    const blob = new Blob([csv.join("\n")],{type:"text/csv"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href=url;
@@ -287,7 +288,6 @@ function initDashboard(){
     a.click();
     URL.revokeObjectURL(url);
   });
-
 }
 </script>
 </body>
