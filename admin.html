@@ -1,4 +1,3 @@
-// THIS IS WORKING 
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,6 +20,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 .tab.active { display:block; }
 #authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 #loginBtn { display:block; margin:20px auto; padding:10px 20px; font-size:16px; cursor:pointer; }
+#votesPieChart { max-width:600px; margin:20px auto; display:block; }
 </style>
 </head>
 <body>
@@ -33,6 +33,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
     <button id="scoresTabBtn">Scores</button>
     <button id="votesTabBtn">Detailed Votes</button>
     <button id="resetButton">Reset All Votes</button>
+    <button id="exportCSVBtn">Export CSV</button>
   </div>
 
   <div id="scoresTab" class="tab active">
@@ -52,6 +53,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
   </div>
 
   <div id="votesTab" class="tab">
+    <canvas id="votesPieChart" width="400" height="400"></canvas>
     <table id="votesTable">
       <thead>
         <tr>
@@ -71,7 +73,9 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import Chart from 'https://cdn.jsdelivr.net/npm/chart.js';
 
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
   authDomain: "rotm-2a088.firebaseapp.com",
@@ -83,145 +87,197 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// CHANGE THIS → put your own admin email(s) here
+// --- Admin emails
 const adminEmails = ["vpsjdon@gmail.com"];
 
+// DOM
 const authStatus = document.getElementById("authStatus");
 const adminContent = document.getElementById("adminContent");
 const loginBtn = document.getElementById("loginBtn");
 
-// Login button click
+// Login
 loginBtn.addEventListener("click", async () => {
-  try {
-    await signInWithPopup(auth, provider);
-  } catch (e) {
-    console.error("Login failed", e);
-    authStatus.innerText = "Login failed. Try again.";
-  }
+  try { await signInWithPopup(auth, provider); }
+  catch(e){ console.error("Login failed", e); authStatus.innerText="Login failed. Try again."; }
 });
 
-// Listen to auth state
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    authStatus.innerText = "Please log in to continue.";
-    loginBtn.style.display = "block";
-    adminContent.style.display = "none";
-  } else if (adminEmails.includes(user.email)) {
-    authStatus.innerText = "Signed in as " + user.email;
-    loginBtn.style.display = "none";
-    adminContent.style.display = "block";
+// Auth state
+onAuthStateChanged(auth, user => {
+  if(!user){
+    authStatus.innerText="Please log in to continue.";
+    loginBtn.style.display="block";
+    adminContent.style.display="none";
+  } else if(adminEmails.includes(user.email)){
+    authStatus.innerText="Signed in as " + user.email;
+    loginBtn.style.display="none";
+    adminContent.style.display="block";
     initDashboard();
   } else {
-    authStatus.innerText = "Access denied for " + user.email;
-    loginBtn.style.display = "none";
-    adminContent.style.display = "none";
+    authStatus.innerText="Access denied for " + user.email;
+    loginBtn.style.display="none";
+    adminContent.style.display="none";
     signOut(auth);
   }
 });
 
-// ---------------- Dashboard Logic ----------------
-function initDashboard() {
+// ---------------- Dashboard ----------------
+function initDashboard(){
   const scoresTabBtn = document.getElementById("scoresTabBtn");
   const votesTabBtn = document.getElementById("votesTabBtn");
   const scoresTab = document.getElementById("scoresTab");
   const votesTab = document.getElementById("votesTab");
   const resetButton = document.getElementById("resetButton"); 
+  const exportCSVBtn = document.getElementById("exportCSVBtn");
+  const votesPieChartCtx = document.getElementById("votesPieChart").getContext("2d");
 
-  scoresTabBtn.addEventListener("click", () => { scoresTab.classList.add("active"); votesTab.classList.remove("active"); });
-  votesTabBtn.addEventListener("click", () => { votesTab.classList.add("active"); scoresTab.classList.remove("active"); });
+  scoresTabBtn.addEventListener("click",()=>{ scoresTab.classList.add("active"); votesTab.classList.remove("active"); });
+  votesTabBtn.addEventListener("click",()=>{ votesTab.classList.add("active"); scoresTab.classList.remove("active"); });
 
-  const videosCol = collection(db, "videos");
-  const votesCol = collection(db, "votes");
+  const videosCol = collection(db,"videos");
+  const votesCol = collection(db,"votes");
 
   let videosData = {};
   let votesData = [];
   let videosLoaded = false;
   let votesLoaded = false;
+  let rankingNeedsRender=false;
+  let pieChart=null;
 
-  onSnapshot(videosCol, snapshot => {
-    videosData = {};
-    snapshot.docs.forEach(doc => {
-      videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0 };
-    });
-    videosLoaded = true;
+  // Firestore listeners
+  onSnapshot(videosCol, snapshot=>{
+    videosData={};
+    snapshot.docs.forEach(doc=>{ videosData[doc.id]={...doc.data(), votePoints:0, upvotePoints:0, totalScore:0}; });
+    videosLoaded=true;
     if(votesLoaded) calculateScores();
   });
 
-  onSnapshot(votesCol, snapshot => {
-    votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    votesLoaded = true;
+  onSnapshot(votesCol, snapshot=>{
+    votesData=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));
+    votesLoaded=true;
     if(videosLoaded) calculateScores();
     renderVotes();
   });
 
-  function calculateScores() {
+  // Scores calculation
+  function calculateScores(){
     if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
-
-    Object.values(videosData).forEach(v => { v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
-
-    votesData.forEach(vote=>{
-      if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints += 100;
-      if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
-      if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
+    Object.values(videosData).forEach(v=>{ v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
+    votesData.forEach(v=>{
+      if(v.rank1 && videosData[v.rank1]) videosData[v.rank1].votePoints+=100;
+      if(v.rank2 && videosData[v.rank2]) videosData[v.rank2].votePoints+=50;
+      if(v.rank3 && videosData[v.rank3]) videosData[v.rank3].votePoints+=25;
     });
-
-    const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>b[1].upvotes - a[1].upvotes);
-    const step = 10;
-    sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(sortedByUpvotes.length - i); });
-
-    Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
-
-    renderRanking();
+    const sortedByUpvotes=Object.entries(videosData).sort((a,b)=>b[1].upvotes-a[1].upvotes);
+    const step=10;
+    sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints=step*(sortedByUpvotes.length-i); });
+    Object.values(videosData).forEach(v=>{ v.totalScore=v.votePoints+v.upvotePoints; });
+    scheduleRenderRanking();
+    renderPieChart();
   }
 
-  function renderRanking() {
-    const tbody = document.querySelector("#rankingTable tbody");
-    tbody.innerHTML = "";
-    const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
+  // Animated ranking
+  function scheduleRenderRanking(){
+    if(document.visibilityState==="visible"){ renderRanking(); rankingNeedsRender=false; }
+    else rankingNeedsRender=true;
+  }
+
+  document.addEventListener("visibilitychange",()=>{
+    if(document.visibilityState==="visible" && rankingNeedsRender){ renderRanking(); rankingNeedsRender=false; }
+  });
+
+  function renderRanking(){
+    const tbody=document.querySelector("#rankingTable tbody");
+    const oldPositions=Array.from(tbody.children).map(tr=>tr.getBoundingClientRect());
+    const sorted=Object.entries(videosData).sort((a,b)=>b[1].totalScore-a[1].totalScore);
+    const fragment=document.createDocumentFragment();
     sorted.forEach(([id,v],i)=>{
-      const tr = document.createElement("tr");
+      let tr=tbody.querySelector(`tr[data-id="${id}"]`);
+      if(!tr){ tr=document.createElement("tr"); tr.dataset.id=id; }
+      tr.innerHTML=`
+        <td>${i+1}</td>
+        <td>${v.title}</td>
+        <td>${v.upvotes||0}</td>
+        <td>${v.upvotePoints||0}</td>
+        <td>${v.votePoints||0}</td>
+        <td>${v.totalScore||0}</td>
+      `;
+      tr.classList.remove("top1","top2","top3");
       if(i===0) tr.classList.add("top1");
       else if(i===1) tr.classList.add("top2");
       else if(i===2) tr.classList.add("top3");
-      tr.innerHTML = `
-        <td>${i+1}</td>
-        <td>${v.title}</td>
-        <td>${v.upvotes || 0}</td>
-        <td>${v.upvotePoints || 0}</td>
-        <td>${v.votePoints || 0}</td>
-        <td>${v.totalScore || 0}</td>
-      `;
-      tbody.appendChild(tr);
+      fragment.appendChild(tr);
+    });
+    tbody.innerHTML="";
+    tbody.appendChild(fragment);
+    Array.from(tbody.children).forEach((tr,i)=>{
+      const firstRect=oldPositions[i];
+      if(firstRect){
+        const lastRect=tr.getBoundingClientRect();
+        const invert=firstRect.top-lastRect.top;
+        tr.style.transition="none";
+        tr.style.transform=`translateY(${invert}px)`;
+        requestAnimationFrame(()=>{ tr.style.transition="transform 1.5s ease"; tr.style.transform=""; });
+      }
     });
   }
 
-  function renderVotes() {
-    const tbody = document.querySelector("#votesTable tbody");
-    tbody.innerHTML = "";
+  // Votes table
+  function renderVotes(){
+    const tbody=document.querySelector("#votesTable tbody");
+    tbody.innerHTML="";
     if(!votesData || votesData.length===0 || Object.keys(videosData).length===0) return;
-
     votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0))
       .forEach(v=>{
-        const tr = document.createElement("tr");
-        const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
-        tr.innerHTML = `
-          <td>${v.userId || ""}</td>
-          <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
-          <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
-          <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
+        const tr=document.createElement("tr");
+        const ts=v.timestamp?.seconds?new Date(v.timestamp.seconds*1000).toLocaleString():"";
+        tr.innerHTML=`
+          <td>${v.userId||""}</td>
+          <td>${v.rank1?videosData[v.rank1]?.title||v.rank1:""}</td>
+          <td>${v.rank2?videosData[v.rank2]?.title||v.rank2:""}</td>
+          <td>${v.rank3?videosData[v.rank3]?.title||v.rank3:""}</td>
           <td>${ts}</td>
         `;
         tbody.appendChild(tr);
       });
   }
 
-  resetButton.addEventListener('click', async () => {
+  // Pie chart
+  function renderPieChart(){
+    const counts={};
+    Object.values(videosData).forEach(v=>counts[v.title]=v.totalScore);
+    const labels=Object.keys(counts);
+    const data=Object.values(counts);
+    if(pieChart) pieChart.destroy();
+    pieChart=new Chart(votesPieChartCtx,{
+      type:'pie',
+      data:{ labels, datasets:[{ data, backgroundColor:labels.map(()=>`hsl(${Math.random()*360},70%,50%)`) }] },
+      options:{ plugins:{ legend:{ position:'bottom' } } }
+    });
+  }
+
+  // Reset votes
+  resetButton.addEventListener('click',async()=>{
     if(!confirm("Delete ALL votes permanently?")) return;
-    try {
-      const querySnapshot = await getDocs(votesCol);
+    try{
+      const querySnapshot=await getDocs(votesCol);
       await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref)));
       alert("All votes reset successfully.");
-    } catch(e) { console.error(e); alert("Failed to reset votes."); }
+    } catch(e){ console.error(e); alert("Failed to reset votes."); }
+  });
+
+  // CSV Export
+  exportCSVBtn.addEventListener('click',()=>{
+    const rows=[["Rank","Title","Upvotes","Upvote Points","Vote Points","Total Score"]];
+    const sorted=Object.entries(videosData).sort((a,b)=>b[1].totalScore-a[1].totalScore);
+    sorted.forEach(([id,v],i)=>rows.push([i+1,v.title,v.upvotes||0,v.upvotePoints||0,v.votePoints||0,v.totalScore||0]));
+    const csvContent="data:text/csv;charset=utf-8,"+rows.map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
+    const encodedUri=encodeURI(csvContent);
+    const link=document.createElement("a");
+    link.setAttribute("href",encodedUri);
+    link.setAttribute("download","rotm_scores.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   });
 }
 </script>
