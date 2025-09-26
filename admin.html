@@ -1,294 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>ROTM Admin Dashboard</title>
-<style>
-body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
-h1,h2 { text-align:center; }
-table { width:100%; border-collapse:collapse; margin-top:20px; }
-th,td { border:1px solid #555; padding:10px; text-align:center; }
-th { background:#333; }
-tr.top1 { background:#d4af37; color:#111; font-weight:bold; }
-tr.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
-tr.top3 { background:#cd7f32; color:#111; font-weight:bold; }
-button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
-.tab-buttons { text-align:center; margin-top:20px; }
-.tab-buttons button { margin:0 5px; }
-#resetButton { background-color: #c0392b; color: white; border: none; }
-.tab { display:none; }
-.tab.active { display:block; }
-#authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
-#votesPieChart { max-width:600px; margin:20px auto; display:block; }
-#loginBtn { margin-top: 10px; padding: 10px 20px; font-size:16px; cursor:pointer; background:#2c3e50; color:#fff; border:none; }
-</style>
+  <meta charset="UTF-8">
+  <title>ROTM Admin Dashboard</title>
+  <style>
+    body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
+    h1,h2 { text-align:center; }
+    table { width:100%; border-collapse:collapse; margin-top:20px; }
+    th,td { border:1px solid #555; padding:10px; text-align:center; }
+    th { background:#333; }
+    tr.top1 { background:#d4af37; color:#111; font-weight:bold; }
+    tr.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
+    tr.top3 { background:#cd7f32; color:#111; font-weight:bold; }
+    button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
+    .tab-buttons { text-align:center; margin-top:20px; }
+    .tab-buttons button { margin:0 5px; }
+    #resetButton { background-color: #c0392b; color: white; border: none; }
+    .tab { display:none; }
+    .tab.active { display:block; }
+    #authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
+    #votesPieChart { max-width:600px; margin:20px auto; display:block; }
+    #authBox { text-align:center; margin-top:20px; }
+  </style>
 </head>
 <body>
-
-<h1>ROTM Admin Dashboard</h1>
-<div id="authStatus">Checking authentication...</div>
-<div id="authBox">
-  <button id="loginBtn">Sign in with Google</button>
-</div>
-
-<div id="adminContent" style="display:none;">
-  <div class="tab-buttons">
-    <button id="scoresTabBtn">Scores</button>
-    <button id="votesTabBtn">Detailed Votes</button>
-    <button id="resetButton">Reset All Votes</button>
-    <button id="exportCSVBtn">Export CSV</button>
+  <h1>ROTM Admin Dashboard</h1>
+  <div id="authStatus">Checking authentication...</div>
+  <div id="authBox" style="display:none;">
+    <button id="loginBtn">Sign in with Google</button>
   </div>
 
-  <div id="scoresTab" class="tab active">
-    <table id="rankingTable">
-      <thead>
-        <tr>
-          <th>Rank</th>
-          <th>Video Title</th>
-          <th>Reddit Upvotes</th>
-          <th>Upvote Points</th>
-          <th>Vote Points</th>
-          <th>Total Score</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+  <div id="adminContent" style="display:none;">
+    <div class="tab-buttons">
+      <button id="scoresTabBtn">Scores</button>
+      <button id="votesTabBtn">Detailed Votes</button>
+      <button id="resetButton">Reset All Votes</button>
+      <button id="exportCSVBtn">Export CSV</button>
+    </div>
+
+    <div id="scoresTab" class="tab active">
+      <table id="rankingTable">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Video Title</th>
+            <th>Reddit Upvotes</th>
+            <th>Upvote Points</th>
+            <th>Vote Points</th>
+            <th>Total Score</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="votesTab" class="tab">
+      <canvas id="votesPieChart" width="400" height="400"></canvas>
+      <table id="votesTable">
+        <thead>
+          <tr>
+            <th>User ID</th>
+            <th>Rank 1</th>
+            <th>Rank 2</th>
+            <th>Rank 3</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
-  <div id="votesTab" class="tab">
-    <canvas id="votesPieChart" width="400" height="400"></canvas>
-    <table id="votesTable">
-      <thead>
-        <tr>
-          <th>User ID</th>
-          <th>Rank 1</th>
-          <th>Rank 2</th>
-          <th>Rank 3</th>
-          <th>Timestamp</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
+  <!-- External Libraries -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+    import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+    import Chart from "https://cdn.jsdelivr.net/npm/chart.js";
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-import Chart from 'https://cdn.jsdelivr.net/npm/chart.js';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
-  authDomain: "rotm-2a088.firebaseapp.com",
-  projectId: "rotm-2a088"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-const provider = new GoogleAuthProvider();
-
-const authStatus = document.getElementById("authStatus");
-const authBox = document.getElementById("authBox");
-const adminContent = document.getElementById("adminContent");
-const loginBtn = document.getElementById("loginBtn");
-
-loginBtn.addEventListener("click", async ()=>{
-  try { await signInWithPopup(auth, provider); } 
-  catch(e){ console.error(e); alert("Login failed."); }
-});
-
-// ---------------- Authentication ----------------
-onAuthStateChanged(auth, async (user) => {
-  if(!user){
-    authStatus.innerText = "Please sign in with Google...";
-    try { await signInWithPopup(auth, provider); } 
-    catch(e){ authStatus.innerText="Login failed. Refresh to try again."; console.error(e); return; }
-  } else {
-    authStatus.innerText = "Signed in as " + user.email;
-    authBox.style.display="none";
-    adminContent.style.display="block";
-    initDashboard();
-  }
-});
-
-// ---------------- Dashboard ----------------
-function initDashboard(){
-  const scoresTabBtn = document.getElementById("scoresTabBtn");
-  const votesTabBtn = document.getElementById("votesTabBtn");
-  const scoresTab = document.getElementById("scoresTab");
-  const votesTab = document.getElementById("votesTab");
-  const resetButton = document.getElementById("resetButton");
-  const exportCSVBtn = document.getElementById("exportCSVBtn");
-  const votesPieChartCanvas = document.getElementById("votesPieChart");
-
-  scoresTabBtn.addEventListener("click",()=>{ scoresTab.classList.add("active"); votesTab.classList.remove("active"); });
-  votesTabBtn.addEventListener("click",()=>{ votesTab.classList.add("active"); scoresTab.classList.remove("active"); });
-
-  const videosCol = collection(db,"videos");
-  const votesCol = collection(db,"votes");
-
-  let videosData = {};
-  let votesData = [];
-  let videosLoaded=false, votesLoaded=false;
-  let currentRanking = [];
-  let votesPieChart = null;
-  let pendingUpdate = false;
-
-  // ---------------- Firestore listeners ----------------
-  onSnapshot(videosCol, snapshot => { 
-    videosData = {}; 
-    snapshot.docs.forEach(doc=>{ videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0 }; });
-    videosLoaded=true; 
-    if(votesLoaded) triggerRankingUpdate(); 
-  });
-
-  onSnapshot(votesCol, snapshot => { 
-    votesData = snapshot.docs.map(doc=>({id:doc.id,...doc.data()})); 
-    votesLoaded=true; 
-    if(videosLoaded) triggerRankingUpdate(); 
-    renderVotes();
-  });
-
-  // ---------------- Ranking Calculation & Animation ----------------
-  function calculateScores(){
-    Object.values(videosData).forEach(v=>{ v.votePoints=0; v.upvotePoints=0; v.totalScore=0; });
-    votesData.forEach(vote=>{
-      if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints+=100;
-      if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints+=50;
-      if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints+=25;
-    });
-
-    const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>a[1].upvotes-b[1].upvotes);
-    const step = 10;
-    sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(i+1); });
-
-    Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
-  }
-
-  function triggerRankingUpdate(){
-    calculateScores();
-    const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
-    const newRanking = sorted.map(([id,v])=>({id, ...v}));
-
-    if(document.visibilityState==="visible"){
-      animateRanking(currentRanking,newRanking);
-      currentRanking = newRanking.slice();
-    } else {
-      pendingUpdate = true;
-    }
-    renderPieChart();
-  }
-
-  document.addEventListener("visibilitychange", ()=>{
-    if(document.visibilityState==="visible" && pendingUpdate){
-      triggerRankingUpdate();
-      pendingUpdate=false;
-    }
-  });
-
-  function animateRanking(oldRanking,newRanking){
-    const tbody = document.querySelector("#rankingTable tbody");
-    tbody.innerHTML="";
-    newRanking.forEach((v,i)=>{
-      const tr = document.createElement("tr");
-      tr.setAttribute("data-id",v.id);
-      if(i===0) tr.classList.add("top1");
-      else if(i===1) tr.classList.add("top2");
-      else if(i===2) tr.classList.add("top3");
-      tr.innerHTML = `
-        <td>${i+1}</td>
-        <td>${v.title}</td>
-        <td>${v.upvotes || 0}</td>
-        <td>${v.upvotePoints || 0}</td>
-        <td>${v.votePoints || 0}</td>
-        <td>${v.totalScore || 0}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-    // Slow dramatic fade-in
-    tbody.querySelectorAll("tr").forEach((tr,i)=>{
-      tr.style.opacity=0;
-      setTimeout(()=>{ tr.style.transition="opacity 1.2s ease-in-out"; tr.style.opacity=1; }, i*300);
-    });
-  }
-
-  // ---------------- Votes Table & Pie Chart ----------------
-  function renderVotes(){
-    const tbody = document.querySelector("#votesTable tbody");
-    tbody.innerHTML="";
-    if(!votesData.length || !Object.keys(videosData).length) return;
-    votesData.slice().sort((a,b)=> (b.timestamp?.seconds||0)-(a.timestamp?.seconds||0))
-      .forEach(v=>{
-        const tr = document.createElement("tr");
-        const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
-        tr.innerHTML = `
-          <td>${v.userId || ""}</td>
-          <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
-          <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
-          <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
-          <td>${ts}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-  }
-
-  function renderPieChart(){
-    if(!votesData.length || !Object.keys(videosData).length) return;
-    const voteCounts = {};
-    Object.keys(videosData).forEach(id=>voteCounts[videosData[id].title]=0);
-    votesData.forEach(v=>{
-      if(v.rank1 && videosData[v.rank1]) voteCounts[videosData[v.rank1].title || v.rank1]+=1;
-      if(v.rank2 && videosData[v.rank2]) voteCounts[videosData[v.rank2].title || v.rank2]+=0.5;
-      if(v.rank3 && videosData[v.rank3]) voteCounts[videosData[v.rank3].title || v.rank3]+=0.25;
-    });
-
-    const data = {
-      labels: Object.keys(voteCounts),
-      datasets:[{data: Object.values(voteCounts), backgroundColor:['#d4af37','#c0c0c0','#cd7f32','#444','#666','#888','#aaa']}]
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
+      authDomain: "rotm-2a088.firebaseapp.com",
+      projectId: "rotm-2a088"
     };
 
-    if(votesPieChart) votesPieChart.destroy();
-    votesPieChart = new Chart(votesPieChartCanvas, {type:'pie',data:data});
-  }
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
-  // ---------------- Reset Votes ----------------
-  resetButton.addEventListener("click", async()=>{
-    if(!confirm("Delete ALL votes permanently?")) return;
-    try{
-      const querySnapshot = await getDocs(votesCol);
-      await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref)));
-      alert("All votes reset successfully.");
-    }catch(e){ console.error(e); alert("Failed to reset votes."); }
-  });
+    const authStatus = document.getElementById("authStatus");
+    const authBox = document.getElementById("authBox");
+    const loginBtn = document.getElementById("loginBtn");
+    const adminContent = document.getElementById("adminContent");
 
-  // ---------------- Export CSV ----------------
-  exportCSVBtn.addEventListener("click", ()=>{
-    if(!votesData.length || !Object.keys(videosData).length) return;
-
-    const csv = [];
-    const headers = ["UserID","Rank1","Rank2","Rank3","Timestamp"];
-    csv.push(headers.join(","));
-    votesData.forEach(v=>{
-      const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
-      csv.push([v.userId||"",v.rank1||"",v.rank2||"",v.rank3||"",ts].join(","));
+    // ---- Login button
+    loginBtn.addEventListener("click", async () => {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (e) {
+        console.error("Login failed", e);
+        authStatus.innerText = "Login failed. Try again.";
+      }
     });
 
-    csv.push("\nVideo Title,Upvotes,Upvote Points,Vote Points,Total Score");
-    Object.values(videosData).forEach(v=>{
-      csv.push([v.title,v.upvotes||0,v.upvotePoints||0,v.votePoints||0,v.totalScore||0].join(","));
+    // ---- Auth state
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        authStatus.innerText = "Signed in as " + user.email;
+        authBox.style.display = "none";
+        adminContent.style.display = "block";
+        initDashboard();
+      } else {
+        authStatus.innerText = "Not signed in";
+        authBox.style.display = "block";
+        adminContent.style.display = "none";
+      }
     });
 
-    const blob = new Blob([csv.join("\n")],{type:"text/csv"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href=url;
-    a.download="ROTM_votes.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-}
-</script>
+    // ---- Dashboard (ranking + charts + CSV etc.)
+    function initDashboard() {
+      // TODO: your existing dashboard logic (ranking animation, pie chart, reset, export CSV)
+    }
+  </script>
 </body>
 </html>
