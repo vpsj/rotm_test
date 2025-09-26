@@ -12,9 +12,7 @@
       max-width: 1200px;
       margin: auto;
     }
-    h1, h2 {
-      text-align: center;
-    }
+    h1, h2 { text-align: center; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -25,50 +23,34 @@
       padding: 10px;
       text-align: center;
     }
-    th {
-      background: #333;
-    }
+    th { background: #333; }
     tr.top1 { background: #d4af37; color: #111; font-weight: bold; }
     tr.top2 { background: #c0c0c0; color: #111; font-weight: bold; }
     tr.top3 { background: #cd7f32; color: #111; font-weight: bold; }
-
     button {
       margin-top: 20px;
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
     }
-    .tab-buttons {
-      text-align: center;
-      margin-top: 20px;
-    }
-    .tab-buttons button {
-      margin: 0 5px;
-    }
-    #resetButton {
-      background-color: #c0392b;
-      color: white;
-      border: none;
-    }
+    .tab-buttons { text-align: center; margin-top: 20px; }
+    .tab-buttons button { margin: 0 5px; }
+    #resetButton { background-color: #c0392b; color: white; border: none; }
     .tab { display: none; }
     .tab.active { display: block; }
-    #authStatus {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 18px;
-      font-weight: bold;
-    }
-    #votesPieChart {
-      max-width: 600px;
-      margin: 20px auto;
-      display: block;
-    }
+    #authStatus { text-align: center; margin-top: 20px; font-size: 18px; font-weight: bold; }
+    #votesPieChart { max-width: 600px; margin: 20px auto; display: block; }
+    #loginBtn, #logoutBtn { display: block; margin: 20px auto; }
   </style>
 </head>
 <body>
   <h1>ROTM Admin Dashboard</h1>
 
-  <div id="authStatus">Checking authentication...</div>
+  <div id="authBox">
+    <div id="authStatus">Checking authentication...</div>
+    <button id="loginBtn" style="display:none;">Sign in with Google</button>
+    <button id="logoutBtn" style="display:none;">Logout</button>
+  </div>
 
   <div id="adminContent" style="display:none;">
     <div class="tab-buttons">
@@ -111,7 +93,7 @@
     </div>
   </div>
 
-  <!-- External Libraries -->
+  <!-- Firebase + Chart.js -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
     import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
@@ -129,24 +111,39 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
+    const authBox = document.getElementById("authBox");
     const authStatus = document.getElementById("authStatus");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
     const adminContent = document.getElementById("adminContent");
 
-    // ---------------- Authentication ----------------
-    onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        authStatus.innerText = "Please sign in with Google...";
-        try {
-          await signInWithPopup(auth, provider);
-        } catch (e) {
-          console.error("Login failed", e);
-          authStatus.innerText = "Login failed. Refresh to try again.";
-          return;
-        }
-      } else {
+    // --- Login / Logout buttons
+    loginBtn.addEventListener("click", async () => {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (e) {
+        console.error("Login failed", e);
+        authStatus.innerText = "Login failed. Try again.";
+      }
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      await signOut(auth);
+    });
+
+    // --- Auth listener
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
         authStatus.innerText = "Signed in as " + user.email;
+        loginBtn.style.display = "none";
+        logoutBtn.style.display = "block";
         adminContent.style.display = "block";
         initDashboard();
+      } else {
+        authStatus.innerText = "Please sign in with Google...";
+        loginBtn.style.display = "block";
+        logoutBtn.style.display = "none";
+        adminContent.style.display = "none";
       }
     });
 
@@ -160,67 +157,73 @@
       const scoresTab = document.getElementById("scoresTab");
       const votesTab = document.getElementById("votesTab");
 
-      scoresTabBtn.addEventListener("click", () => {
+      scoresTabBtn.onclick = () => {
         scoresTab.classList.add("active");
         votesTab.classList.remove("active");
-      });
-      votesTabBtn.addEventListener("click", () => {
+      };
+      votesTabBtn.onclick = () => {
         votesTab.classList.add("active");
         scoresTab.classList.remove("active");
-      });
+      };
 
       const videosCol = collection(db, "videos");
       const votesCol = collection(db, "votes");
 
       let videosData = {};
       let votesData = [];
+      let pieChart;
 
-      // Firestore listeners
-      onSnapshot(videosCol, snapshot => {
+      onSnapshot(videosCol, snap => {
         videosData = {};
-        snapshot.docs.forEach(doc => {
+        snap.docs.forEach(doc => {
           videosData[doc.id] = { ...doc.data(), votePoints: 0, upvotePoints: 0, totalScore: 0 };
         });
         if (votesData.length) calculateScores();
       });
 
-      onSnapshot(votesCol, snapshot => {
-        votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      onSnapshot(votesCol, snap => {
+        votesData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         if (Object.keys(videosData).length) calculateScores();
         renderVotes();
         renderPieChart();
       });
 
-      // Scoring
       function calculateScores() {
-        const sortedByVotes = {};
+        // Reset
+        Object.values(videosData).forEach(v => { v.votePoints = 0; v.upvotePoints = 0; v.totalScore = 0; });
+
         votesData.forEach(v => {
           if (v.rank1 && videosData[v.rank1]) videosData[v.rank1].votePoints += 3;
           if (v.rank2 && videosData[v.rank2]) videosData[v.rank2].votePoints += 2;
           if (v.rank3 && videosData[v.rank3]) videosData[v.rank3].votePoints += 1;
         });
-        const sortedByUpvotes = Object.entries(videosData).sort((a, b) => (b[1].upvotes || 0) - (a[1].upvotes || 0));
-        const step = sortedByUpvotes.length;
+
+        const sortedByUpvotes = Object.entries(videosData)
+          .sort((a, b) => (b[1].upvotes || 0) - (a[1].upvotes || 0));
+
         sortedByUpvotes.forEach(([id, v], i) => {
-          videosData[id].upvotePoints = step - i;
+          videosData[id].upvotePoints = sortedByUpvotes.length - i;
         });
+
         Object.values(videosData).forEach(v => {
           v.totalScore = v.votePoints + v.upvotePoints;
         });
+
         renderRanking();
       }
 
-      // Render ranking
       function renderRanking() {
         const tbody = document.querySelector("#rankingTable tbody");
         tbody.innerHTML = "";
         const sorted = Object.entries(videosData).sort((a, b) => b[1].totalScore - a[1].totalScore);
+
         sorted.forEach(([id, v], i) => {
           const tr = document.createElement("tr");
           tr.className = "";
           if (i === 0) tr.classList.add("top1");
           else if (i === 1) tr.classList.add("top2");
           else if (i === 2) tr.classList.add("top3");
+
           tr.innerHTML = `
             <td>${i + 1}</td>
             <td>${v.title}</td>
@@ -233,7 +236,6 @@
         });
       }
 
-      // Render votes table
       function renderVotes() {
         const tbody = document.querySelector("#votesTable tbody");
         tbody.innerHTML = "";
@@ -250,8 +252,6 @@
         });
       }
 
-      // Pie chart
-      let pieChart;
       function renderPieChart() {
         const ctx = document.getElementById("votesPieChart");
         const counts = {};
@@ -266,18 +266,11 @@
         if (pieChart) pieChart.destroy();
         pieChart = new Chart(ctx, {
           type: "pie",
-          data: {
-            labels,
-            datasets: [{
-              data,
-              backgroundColor: ["#ff6384", "#36a2eb", "#cc65fe", "#ffce56", "#4bc0c0", "#9966ff"]
-            }]
-          }
+          data: { labels, datasets: [{ data }] }
         });
       }
 
-      // Reset button
-      resetButton.addEventListener("click", async () => {
+      resetButton.onclick = async () => {
         if (!confirm("Delete ALL votes permanently?")) return;
         try {
           const querySnapshot = await getDocs(votesCol);
@@ -287,10 +280,9 @@
           console.error(e);
           alert("Failed to reset votes.");
         }
-      });
+      };
 
-      // Export CSV
-      exportCSVBtn.addEventListener("click", () => {
+      exportCSVBtn.onclick = () => {
         let csv = "User ID,Rank 1,Rank 2,Rank 3,Timestamp\n";
         votesData.forEach(v => {
           csv += `${v.userId || "N/A"},${v.rank1 || "-"},${v.rank2 || "-"},${v.rank3 || "-"},${v.timestamp ? new Date(v.timestamp.seconds * 1000).toISOString() : "-"}\n`;
@@ -302,7 +294,7 @@
         a.download = "votes.csv";
         a.click();
         URL.revokeObjectURL(url);
-      });
+      };
     }
   </script>
 </body>
