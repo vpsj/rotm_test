@@ -10,11 +10,7 @@ h1, h2 { text-align:center; }
 table { width:100%; border-collapse:collapse; margin-top:20px; }
 th, td { border:1px solid #555; padding:10px; text-align:center; }
 th { background:#333; }
-/* Animation CSS for ranking movement */
-#rankingTable tbody tr {
-    transition: all 0.7s ease-in-out; 
-    position: relative; 
-}
+#rankingTable tbody tr { transition: all 0.7s ease-in-out; position: relative; }
 tr.top1 { background:#d4af37; color:#111; font-weight:bold; }
 tr.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
 tr.top3 { background:#cd7f32; color:#111; font-weight:bold; }
@@ -28,12 +24,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 #authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
 #loginBtn { display:block; margin:20px auto; padding:10px 20px; font-size:16px; cursor:pointer; }
 #pieChartContainer { margin-top: 30px; padding: 20px; background: #222; border-radius: 5px; }
-/* Dramatic animation for ranking movement */
-@keyframes rankMove {
-    0% { transform: translateY(-30px); opacity: 0.5; }
-    50% { transform: translateY(15px); opacity: 1; }
-    100% { transform: translateY(0); opacity: 1; }
-}
+@keyframes rankMove { 0% { transform: translateY(-30px); opacity:0.5; } 50% { transform: translateY(15px); opacity:1; } 100% { transform: translateY(0); opacity:1; } }
 .rank-move { animation: rankMove 0.8s ease-in-out; }
 </style>
 </head>
@@ -83,7 +74,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
       </table>
       
       <div id="pieChartContainer">
-        <h2>Total Rank 1 Votes Distribution</h2>
+        <h2>Votes Distribution (Rank 1/2/3)</h2>
         <div id="rank1PieChart" style="width: 100%; height: 500px;"></div>
       </div>
 
@@ -106,46 +97,34 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// CHANGE THIS → put your own admin email(s) here
+// ADMIN EMAILS
 const adminEmails = ["vpsjdon@gmail.com"];
 
 const authStatus = document.getElementById("authStatus");
 const adminContent = document.getElementById("adminContent");
 const loginBtn = document.getElementById("loginBtn");
 
-// ---------------- Authentication Logic (UNCHANGED) ----------------
+// --- Authentication ---
 loginBtn.addEventListener("click", async () => {
     try { await signInWithPopup(auth, provider); } 
-    catch (e) { console.error("Login failed", e); authStatus.innerText = "Login failed. Try again."; }
+    catch (e) { console.error(e); authStatus.innerText = "Login failed. Try again."; }
 });
 
 onAuthStateChanged(auth, (user) => {
-    if (!user) {
-      authStatus.innerText = "Please log in to continue.";
-      loginBtn.style.display = "block";
-      adminContent.style.display = "none";
-    } else if (adminEmails.includes(user.email)) {
-      authStatus.innerText = "Signed in as " + user.email;
-      loginBtn.style.display = "none";
-      adminContent.style.display = "block";
-      initDashboard();
-    } else {
-      authStatus.innerText = "Access denied for " + user.email;
-      loginBtn.style.display = "none";
-      adminContent.style.display = "none";
-      signOut(auth);
-    }
+    if(!user){ authStatus.innerText="Please log in to continue."; loginBtn.style.display="block"; adminContent.style.display="none"; }
+    else if(adminEmails.includes(user.email)){ authStatus.innerText="Signed in as "+user.email; loginBtn.style.display="none"; adminContent.style.display="block"; initDashboard(); }
+    else { authStatus.innerText="Access denied for "+user.email; loginBtn.style.display="none"; adminContent.style.display="none"; signOut(auth); }
 });
 
-// ---------------- Dashboard Logic ----------------
+// --- Dashboard ---
 let videosData = {};
 let votesData = [];
 let videosLoaded = false;
 let votesLoaded = false;
-const videosCol = collection(db, "videos");
-const votesCol = collection(db, "votes");
+const videosCol = collection(db,"videos");
+const votesCol = collection(db,"votes");
 
-function initDashboard() {
+function initDashboard(){
     const scoresTabBtn = document.getElementById("scoresTabBtn");
     const votesTabBtn = document.getElementById("votesTabBtn");
     const scoresTab = document.getElementById("scoresTab");
@@ -153,154 +132,106 @@ function initDashboard() {
     const resetButton = document.getElementById("resetButton");
     const exportCsvBtn = document.getElementById("exportCsvBtn");
 
-    // Tab switching logic with animation trigger
-    scoresTabBtn.addEventListener("click", () => { 
-        scoresTab.classList.add("active"); 
-        votesTab.classList.remove("active"); 
-        triggerRankingAnimation();
-    });
-    votesTabBtn.addEventListener("click", () => { 
-        votesTab.classList.add("active"); 
-        scoresTab.classList.remove("active");
-        drawRank1PieChart();
+    scoresTabBtn.addEventListener("click",()=>{ scoresTab.classList.add("active"); votesTab.classList.remove("active"); triggerRankingAnimation(); });
+    votesTabBtn.addEventListener("click",()=>{ votesTab.classList.add("active"); scoresTab.classList.remove("active"); drawVotesChart(); });
+
+    onSnapshot(videosCol,snapshot=>{
+        videosData={};
+        snapshot.docs.forEach(doc=>{ videosData[doc.id]={...doc.data(), votePoints:0, upvotePoints:0, totalScore:0, rank1Votes:0, rank2Votes:0, rank3Votes:0 }; });
+        videosLoaded=true; if(votesLoaded) calculateScores();
     });
 
-    // Animate rankings when tab gains focus
-    window.addEventListener('focus', () => { if(scoresTab.classList.contains('active')) triggerRankingAnimation(); });
-
-    // Firebase listeners
-    onSnapshot(videosCol, snapshot => {
-        videosData = {};
-        snapshot.docs.forEach(doc => { videosData[doc.id] = { ...doc.data(), votePoints:0, upvotePoints:0, totalScore:0, rank1Votes:0 }; });
-        videosLoaded = true; if(votesLoaded) calculateScores();
+    onSnapshot(votesCol,snapshot=>{
+        votesData=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));
+        votesLoaded=true; if(videosLoaded) calculateScores(); renderVotes();
     });
 
-    onSnapshot(votesCol, snapshot => {
-        votesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        votesLoaded = true; if(videosLoaded) calculateScores(); renderVotes();
-    });
-
-    // Score calculations
-    function calculateScores() {
+    function calculateScores(){
         if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
-        Object.values(videosData).forEach(v => { v.votePoints=0; v.upvotePoints=0; v.totalScore=0; v.rank1Votes=0; });
+        Object.values(videosData).forEach(v=>{ v.votePoints=0; v.upvotePoints=0; v.totalScore=0; v.rank1Votes=0; v.rank2Votes=0; v.rank3Votes=0; });
 
         votesData.forEach(vote=>{
-            if(vote.rank1 && videosData[vote.rank1]) { 
-                videosData[vote.rank1].votePoints += 100; videosData[vote.rank1].rank1Votes += 1;
-            }
-            if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints += 50;
-            if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints += 25;
+            if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints+=100, videosData[vote.rank1].rank1Votes+=1;
+            if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints+=50, videosData[vote.rank2].rank2Votes+=1;
+            if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints+=25, videosData[vote.rank3].rank3Votes+=1;
         });
 
-        const sortedByUpvotes = Object.entries(videosData).sort((a,b)=>b[1].upvotes - a[1].upvotes);
-        const step = 10; sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints = step*(sortedByUpvotes.length - i); });
+        const sortedByUpvotes=Object.entries(videosData).sort((a,b)=>b[1].upvotes-a[1].upvotes);
+        const step=10; sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints=step*(sortedByUpvotes.length-i); });
 
-        Object.values(videosData).forEach(v=>{ v.totalScore = v.votePoints + v.upvotePoints; });
-        renderRanking();
-        drawRank1PieChart();
+        Object.values(videosData).forEach(v=>v.totalScore=v.votePoints+v.upvotePoints);
+        renderRanking(); drawVotesChart();
     }
 
-    // Ranking render with smooth transition
-    function renderRanking() {
-      const tbody = document.querySelector("#rankingTable tbody");
-      const existingRows = Array.from(tbody.querySelectorAll('tr')).reduce((acc, tr) => { acc[tr.dataset.videoId] = tr; return acc; }, {});
-      tbody.innerHTML = "";
-      const sorted = Object.entries(videosData).sort((a,b)=>b[1].totalScore - a[1].totalScore);
-
-      sorted.forEach(([id,v],i)=>{
-          let tr = existingRows[id] || document.createElement("tr");
-          tr.dataset.videoId = id;
-          tr.innerHTML = `
-            <td>${i+1}</td>
-            <td>${v.title}</td>
-            <td>${v.upvotes || 0}</td>
-            <td>${v.upvotePoints || 0}</td>
-            <td>${v.votePoints || 0}</td>
-            <td>${v.totalScore || 0}</td>
-          `;
-          tr.classList.remove("top1","top2","top3");
-          if(i===0) tr.classList.add("top1");
-          else if(i===1) tr.classList.add("top2");
-          else if(i===2) tr.classList.add("top3");
-          tbody.appendChild(tr);
-      });
-    }
-
-    function renderVotes() {
-        const tbody = document.querySelector("#votesTable tbody");
-        tbody.innerHTML = "";
-        if(!votesData || votesData.length===0 || Object.keys(videosData).length===0) return;
-
-        votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0)).forEach(v=>{
-            const tr = document.createElement("tr");
-            const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : "";
-            tr.innerHTML = `
-              <td>${v.userId || ""}</td>
-              <td>${v.rank1 ? videosData[v.rank1]?.title || v.rank1 : ""}</td>
-              <td>${v.rank2 ? videosData[v.rank2]?.title || v.rank2 : ""}</td>
-              <td>${v.rank3 ? videosData[v.rank3]?.title || v.rank3 : ""}</td>
-              <td>${ts}</td>
-            `;
+    function renderRanking(){
+        const tbody=document.querySelector("#rankingTable tbody");
+        const existingRows=Array.from(tbody.querySelectorAll('tr')).reduce((acc,tr)=>{ acc[tr.dataset.videoId]=tr; return acc; },{});
+        tbody.innerHTML="";
+        const sorted=Object.entries(videosData).sort((a,b)=>b[1].totalScore-a[1].totalScore);
+        sorted.forEach(([id,v],i)=>{
+            let tr=existingRows[id]||document.createElement("tr");
+            tr.dataset.videoId=id;
+            tr.innerHTML=`<td>${i+1}</td><td>${v.title}</td><td>${v.upvotes||0}</td><td>${v.upvotePoints||0}</td><td>${v.votePoints||0}</td><td>${v.totalScore||0}</td>`;
+            tr.classList.remove("top1","top2","top3");
+            if(i===0) tr.classList.add("top1"); else if(i===1) tr.classList.add("top2"); else if(i===2) tr.classList.add("top3");
             tbody.appendChild(tr);
         });
     }
 
-    // Reset votes
-    resetButton.addEventListener('click', async () => {
+    function renderVotes(){
+        const tbody=document.querySelector("#votesTable tbody");
+        tbody.innerHTML="";
+        if(!votesData || votesData.length===0 || Object.keys(videosData).length===0) return;
+        votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0)).forEach(v=>{
+            const tr=document.createElement("tr");
+            const ts=v.timestamp?.seconds?new Date(v.timestamp.seconds*1000).toLocaleString():"";
+            tr.innerHTML=`<td>${v.userId||""}</td><td>${v.rank1?videosData[v.rank1]?.title||v.rank1:""}</td><td>${v.rank2?videosData[v.rank2]?.title||v.rank2:""}</td><td>${v.rank3?videosData[v.rank3]?.title||v.rank3:""}</td><td>${ts}</td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    resetButton.addEventListener('click',async()=>{
         if(!confirm("Delete ALL votes permanently?")) return;
-        try { const querySnapshot = await getDocs(votesCol); await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref))); alert("All votes reset successfully."); } 
+        try{ const querySnapshot=await getDocs(votesCol); await Promise.all(querySnapshot.docs.map(doc=>deleteDoc(doc.ref))); alert("All votes reset successfully."); }
         catch(e){ console.error(e); alert("Failed to reset votes."); }
     });
 
-    // Draw Rank1 Pie Chart
-    function drawRank1PieChart() {
-        if (typeof google === 'undefined' || !votesLoaded || Object.keys(videosData).length === 0) return;
-        const chartData = [['Video Title', 'Rank 1 Votes']];
-        let totalRank1Votes = 0;
-        Object.values(videosData).forEach(v => { if (v.rank1Votes>0){ chartData.push([v.title,v.rank1Votes]); totalRank1Votes+=v.rank1Votes; }});
-        const unaccounted = votesData.length - totalRank1Votes;
-        if(unaccounted>0) chartData.push(['Unaccounted/Invalid Votes',unaccounted]);
-        if(chartData.length<=1){ document.getElementById('rank1PieChart').innerHTML = '<p style="text-align:center;">No Rank 1 votes recorded yet.</p>'; return; }
-
-        const data = google.visualization.arrayToDataTable(chartData);
-        const options = {
-            title: `Rank 1 Votes Distribution (Total Votes: ${votesData.length})`,
-            is3D: true,
-            backgroundColor: '#222',
-            legend: { textStyle: { color: '#fff' } },
-            titleTextStyle: { color: '#fff' },
-            colors: ['#d4af37','#c0c0c0','#cd7f32','#3498db','#9b59b6','#e74c3c','#1abc9c','#f1c40f']
-        };
-        const chart = new google.visualization.PieChart(document.getElementById('rank1PieChart'));
-        chart.draw(data, options);
+    function triggerRankingAnimation(){
+        const tbody=document.querySelector("#rankingTable tbody");
+        tbody.querySelectorAll('tr').forEach(tr=>{ tr.classList.remove('rank-move'); void tr.offsetWidth; tr.classList.add('rank-move'); });
     }
-    google.charts.load('current', {'packages':['corechart']});
 
-    // CSV export logic
-    exportCsvBtn.addEventListener('click', () => {
+    // --- Charts ---
+    function drawVotesChart(){
+        if(typeof google==='undefined'||!votesLoaded||Object.keys(videosData).length===0) return;
+        const chartContainer=document.getElementById('rank1PieChart');
+        const chartDataArray=[['Video Title','Rank 1','Rank 2','Rank 3']];
+        Object.values(videosData).forEach(v=>{ chartDataArray.push([v.title,v.rank1Votes||0,v.rank2Votes||0,v.rank3Votes||0]); });
+        const data=google.visualization.arrayToDataTable(chartDataArray);
+        const options={ title:'Votes Distribution (Rank1/2/3) per Video', isStacked:true, backgroundColor:'#222', legend:{textStyle:{color:'#fff'}}, titleTextStyle:{color:'#fff', fontSize:16}, colors:['#d4af37','#c0c0c0','#cd7f32'], chartArea:{width:'70%',height:'70%'} };
+        const chart=new google.visualization.BarChart(chartContainer); chart.draw(data,options);
+    }
+    google.charts.load('current',{'packages':['corechart']});
+
+    // --- CSV export (titles) ---
+    exportCsvBtn.addEventListener('click',()=>{
         if(votesData.length===0){ alert("No votes to export."); return; }
-        const header = ["Timestamp","Rank 1","Rank 2","Rank 3"];
-        const rows = votesData.map(v=>{
-            const ts = v.timestamp?.seconds ? new Date(v.timestamp.seconds*1000).toLocaleString() : '';
-            return [`"${ts}"`,`"${v.rank1||''}"`,`"${v.rank2||''}"`,`"${v.rank3||''}"`].join(',');
+        const header=["User ID","Rank 1 (ID)","Rank 2 (ID)","Rank 3 (ID)","Rank 1 (Title)","Rank 2 (Title)","Rank 3 (Title)","Timestamp"];
+        const rows=votesData.map(v=>{
+            const ts=v.timestamp?.seconds?new Date(v.timestamp.seconds*1000).toLocaleString():"";
+            const r1Title=videosData[v.rank1]?.title||"", r2Title=videosData[v.rank2]?.title||"", r3Title=videosData[v.rank3]?.title||"";
+            return [`"${v.userId||''}"`,`"${v.rank1||''}"`,`"${v.rank2||''}"`,`"${v.rank3||''}"`,`"${r1Title}"`,`"${r2Title}"`,`"${r3Title}"`,`"${ts}"`].join(',');
         });
-        const csvContent = [header.join(','), ...rows].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'rotm_votes_export_' + new Date().toISOString().slice(0,10) + '.csv');
+        const csvContent=[header.join(','),...rows].join('\n');
+        const blob=new Blob([csvContent],{type:'text/csv;charset=utf-8;'});
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement('a');
+        link.setAttribute('href',url);
+        link.setAttribute('download','rotm_votes_export_'+new Date().toISOString().slice(0,10)+'.csv');
         link.style.visibility='hidden';
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
         alert("Votes exported successfully to CSV.");
     });
-
-    // Trigger ranking animation function
-    function triggerRankingAnimation() {
-        const tbody = document.querySelector("#rankingTable tbody");
-        tbody.querySelectorAll('tr').forEach(tr => { tr.classList.remove('rank-move'); void tr.offsetWidth; tr.classList.add('rank-move'); });
-    }
 }
 </script>
 </body>
