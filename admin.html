@@ -82,7 +82,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-import { getFirestore, collection, onSnapshot, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, getDocs, deleteDoc, setDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 const firebaseConfig = {
@@ -95,8 +95,6 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
-
-// ADMIN EMAILS
 const adminEmails = ["vpsjdon@gmail.com"];
 
 const authStatus = document.getElementById("authStatus");
@@ -120,7 +118,61 @@ let videosData = {};
 let votesData = [];
 let videosLoaded = false;
 let votesLoaded = false;
+const videosCol = collection(db,"videos");
 const votesCol = collection(db,"votes");
+
+// --- Helpers ---
+function normalizeUrl(url) {
+    if (!url) return "";
+    let u = url.trim();
+    if (!u.startsWith("http")) {
+        u = "https://www.reddit.com" + (u.startsWith("/") ? "" : "/") + u;
+    }
+    if (u.endsWith("/")) u = u.slice(0, -1);
+    return u;
+}
+
+async function fetchRedditTitle(url) {
+    try {
+        const res = await fetch(`${url}.json`);
+        const json = await res.json();
+        return json?.[0]?.data?.children?.[0]?.data?.title || url;
+    } catch {
+        return url;
+    }
+}
+
+async function fetchRedditUpvotes(url) {
+    try {
+        const res = await fetch(`${url}.json`);
+        const json = await res.json();
+        return json?.[0]?.data?.children?.[0]?.data?.ups || 0;
+    } catch {
+        return 0;
+    }
+}
+
+async function syncVideosFromJson() {
+    try {
+        const resp = await fetch("links.json");
+        const links = await resp.json();
+
+        // Clear old videos
+        const oldSnapshot = await getDocs(videosCol);
+        await Promise.all(oldSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+
+        // Insert new ones
+        for (const rawUrl of links) {
+            const url = normalizeUrl(rawUrl);
+            const title = await fetchRedditTitle(url);
+            const upvotes = await fetchRedditUpvotes(url);
+            await setDoc(doc(videosCol, url), { title, upvotes });
+        }
+        console.log("Videos synced successfully from links.json");
+    } catch (err) {
+        console.error("Failed syncing videos:", err);
+    }
+}
 
 function initDashboard(){
     const scoresTabBtn = document.getElementById("scoresTabBtn");
@@ -133,58 +185,19 @@ function initDashboard(){
     scoresTabBtn.addEventListener("click",()=>{ scoresTab.classList.add("active"); votesTab.classList.remove("active"); triggerRankingAnimation(); });
     votesTabBtn.addEventListener("click",()=>{ votesTab.classList.add("active"); scoresTab.classList.remove("active"); drawVotesChart(); });
 
-    // --- NEW: Load videos from links.json instead of Firestore ---
-    loadVideosFromJson();
+    // 🔥 Sync with links.json before listening
+    syncVideosFromJson();
 
-    // Votes listener remains
+    onSnapshot(videosCol,snapshot=>{
+        videosData={};
+        snapshot.docs.forEach(doc=>{ videosData[doc.id]={...doc.data(), votePoints:0, upvotePoints:0, totalScore:0, rank1Votes:0, rank2Votes:0, rank3Votes:0 }; });
+        videosLoaded=true; if(votesLoaded) calculateScores();
+    });
+
     onSnapshot(votesCol,snapshot=>{
         votesData=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));
         votesLoaded=true; if(videosLoaded) calculateScores(); renderVotes();
     });
-
-    async function loadVideosFromJson() {
-        videosData = {};
-        try {
-            const resp = await fetch("links.json");
-            const links = await resp.json();
-
-            for (const url of links) {
-                const title = await fetchRedditTitle(url);
-                const upvotes = await fetchRedditUpvotes(url);
-
-                const id = url;
-                videosData[id] = {
-                    title,
-                    upvotes,
-                    votePoints:0,
-                    upvotePoints:0,
-                    totalScore:0,
-                    rank1Votes:0,
-                    rank2Votes:0,
-                    rank3Votes:0
-                };
-            }
-            videosLoaded=true; if(votesLoaded) calculateScores();
-        } catch (e) {
-            console.error("Failed to load links.json", e);
-        }
-    }
-
-    async function fetchRedditTitle(url) {
-        try {
-            const resp = await fetch(url + ".json");
-            const json = await resp.json();
-            return json[0].data.children[0].data.title || url;
-        } catch { return url; }
-    }
-
-    async function fetchRedditUpvotes(url) {
-        try {
-            const resp = await fetch(url + ".json");
-            const json = await resp.json();
-            return json[0].data.children[0].data.ups || 0;
-        } catch { return 0; }
-    }
 
     function calculateScores(){
         if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
@@ -205,11 +218,10 @@ function initDashboard(){
 
     function renderRanking(){
         const tbody=document.querySelector("#rankingTable tbody");
-        const existingRows=Array.from(tbody.querySelectorAll('tr')).reduce((acc,tr)=>{ acc[tr.dataset.videoId]=tr; return acc; },{});
         tbody.innerHTML="";
         const sorted=Object.entries(videosData).sort((a,b)=>b[1].totalScore-a[1].totalScore);
         sorted.forEach(([id,v],i)=>{
-            let tr=existingRows[id]||document.createElement("tr");
+            const tr=document.createElement("tr");
             tr.dataset.videoId=id;
             tr.innerHTML=`<td>${i+1}</td><td>${v.title}</td><td>${v.upvotes||0}</td><td>${v.upvotePoints||0}</td><td>${v.votePoints||0}</td><td>${v.totalScore||0}</td>`;
             tr.classList.remove("top1","top2","top3");
@@ -241,7 +253,6 @@ function initDashboard(){
         tbody.querySelectorAll('tr').forEach(tr=>{ tr.classList.remove('rank-move'); void tr.offsetWidth; tr.classList.add('rank-move'); });
     }
 
-    // --- Charts ---
     function drawVotesChart(){
         if(typeof google==='undefined'||!votesLoaded||Object.keys(videosData).length===0) return;
         const chartContainer=document.getElementById('rank1PieChart');
@@ -253,7 +264,6 @@ function initDashboard(){
     }
     google.charts.load('current',{'packages':['corechart']});
 
-    // --- CSV export (titles) ---
     exportCsvBtn.addEventListener('click',()=>{
         if(votesData.length===0){ alert("No votes to export."); return; }
         const header=["User ID","Rank 1 (ID)","Rank 2 (ID)","Rank 3 (ID)","Rank 1 (Title)","Rank 2 (Title)","Rank 3 (Title)","Timestamp"];
