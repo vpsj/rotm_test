@@ -19,6 +19,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
 .tab-buttons button { margin:0 5px; }
 #resetButton { background-color: #c0392b; color: white; border: none; }
 #exportCsvBtn { background-color: #2ecc71; color: white; border: none; }
+#updateVideosBtn { background-color: #3498db; color: white; border: none; } /* New button style */
 .tab { display:none; }
 .tab.active { display:block; }
 #authStatus { text-align:center; margin-top:20px; font-size:18px; font-weight:bold; }
@@ -37,6 +38,7 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
     <div class="tab-buttons">
       <button id="scoresTabBtn">Scores</button>
       <button id="votesTabBtn">Detailed Votes & Stats</button>
+      <button id="updateVideosBtn">Update Videos from links.json</button>
       <button id="resetButton">Reset All Votes</button>
     </div>
 
@@ -77,12 +79,13 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
         <h2>Votes Distribution (Rank 1/2/3)</h2>
         <div id="rank1PieChart" style="width: 100%; height: 500px;"></div>
       </div>
+
     </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-import { getFirestore, collection, onSnapshot, getDocs, deleteDoc, setDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, getDocs, deleteDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 const firebaseConfig = {
@@ -95,11 +98,14 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
+
+// ADMIN EMAILS
 const adminEmails = ["vpsjdon@gmail.com"];
 
 const authStatus = document.getElementById("authStatus");
 const adminContent = document.getElementById("adminContent");
 const loginBtn = document.getElementById("loginBtn");
+const updateVideosBtn = document.getElementById("updateVideosBtn"); 
 
 // --- Authentication ---
 loginBtn.addEventListener("click", async () => {
@@ -121,59 +127,6 @@ let votesLoaded = false;
 const videosCol = collection(db,"videos");
 const votesCol = collection(db,"votes");
 
-// --- Helpers ---
-function normalizeUrl(url) {
-    if (!url) return "";
-    let u = url.trim();
-    if (!u.startsWith("http")) {
-        u = "https://www.reddit.com" + (u.startsWith("/") ? "" : "/") + u;
-    }
-    if (u.endsWith("/")) u = u.slice(0, -1);
-    return u;
-}
-
-async function fetchRedditTitle(url) {
-    try {
-        const res = await fetch(`${url}.json`);
-        const json = await res.json();
-        return json?.[0]?.data?.children?.[0]?.data?.title || url;
-    } catch {
-        return url;
-    }
-}
-
-async function fetchRedditUpvotes(url) {
-    try {
-        const res = await fetch(`${url}.json`);
-        const json = await res.json();
-        return json?.[0]?.data?.children?.[0]?.data?.ups || 0;
-    } catch {
-        return 0;
-    }
-}
-
-async function syncVideosFromJson() {
-    try {
-        const resp = await fetch("links.json");
-        const links = await resp.json();
-
-        // Clear old videos
-        const oldSnapshot = await getDocs(videosCol);
-        await Promise.all(oldSnapshot.docs.map(doc => deleteDoc(doc.ref)));
-
-        // Insert new ones
-        for (const rawUrl of links) {
-            const url = normalizeUrl(rawUrl);
-            const title = await fetchRedditTitle(url);
-            const upvotes = await fetchRedditUpvotes(url);
-            await setDoc(doc(videosCol, url), { title, upvotes });
-        }
-        console.log("Videos synced successfully from links.json");
-    } catch (err) {
-        console.error("Failed syncing videos:", err);
-    }
-}
-
 function initDashboard(){
     const scoresTabBtn = document.getElementById("scoresTabBtn");
     const votesTabBtn = document.getElementById("votesTabBtn");
@@ -184,9 +137,7 @@ function initDashboard(){
 
     scoresTabBtn.addEventListener("click",()=>{ scoresTab.classList.add("active"); votesTab.classList.remove("active"); triggerRankingAnimation(); });
     votesTabBtn.addEventListener("click",()=>{ votesTab.classList.add("active"); scoresTab.classList.remove("active"); drawVotesChart(); });
-
-    // 🔥 Sync with links.json before listening
-    syncVideosFromJson();
+    updateVideosBtn.addEventListener("click", updateVideosFromJSON); // Attach the new function
 
     onSnapshot(videosCol,snapshot=>{
         videosData={};
@@ -204,11 +155,13 @@ function initDashboard(){
         Object.values(videosData).forEach(v=>{ v.votePoints=0; v.upvotePoints=0; v.totalScore=0; v.rank1Votes=0; v.rank2Votes=0; v.rank3Votes=0; });
 
         votesData.forEach(vote=>{
+            // The vote ID must match the video document ID (Reddit Post ID)
             if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints+=100, videosData[vote.rank1].rank1Votes+=1;
             if(vote.rank2 && videosData[vote.rank2]) videosData[vote.rank2].votePoints+=50, videosData[vote.rank2].rank2Votes+=1;
             if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints+=25, videosData[vote.rank3].rank3Votes+=1;
         });
 
+        // Upvote score calculation remains the same
         const sortedByUpvotes=Object.entries(videosData).sort((a,b)=>b[1].upvotes-a[1].upvotes);
         const step=10; sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints=step*(sortedByUpvotes.length-i); });
 
@@ -218,10 +171,11 @@ function initDashboard(){
 
     function renderRanking(){
         const tbody=document.querySelector("#rankingTable tbody");
+        const existingRows=Array.from(tbody.querySelectorAll('tr')).reduce((acc,tr)=>{ acc[tr.dataset.videoId]=tr; return acc; },{});
         tbody.innerHTML="";
         const sorted=Object.entries(videosData).sort((a,b)=>b[1].totalScore-a[1].totalScore);
         sorted.forEach(([id,v],i)=>{
-            const tr=document.createElement("tr");
+            let tr=existingRows[id]||document.createElement("tr");
             tr.dataset.videoId=id;
             tr.innerHTML=`<td>${i+1}</td><td>${v.title}</td><td>${v.upvotes||0}</td><td>${v.upvotePoints||0}</td><td>${v.votePoints||0}</td><td>${v.totalScore||0}</td>`;
             tr.classList.remove("top1","top2","top3");
@@ -253,6 +207,7 @@ function initDashboard(){
         tbody.querySelectorAll('tr').forEach(tr=>{ tr.classList.remove('rank-move'); void tr.offsetWidth; tr.classList.add('rank-move'); });
     }
 
+    // --- Charts ---
     function drawVotesChart(){
         if(typeof google==='undefined'||!votesLoaded||Object.keys(videosData).length===0) return;
         const chartContainer=document.getElementById('rank1PieChart');
@@ -264,6 +219,7 @@ function initDashboard(){
     }
     google.charts.load('current',{'packages':['corechart']});
 
+    // --- CSV export (titles) ---
     exportCsvBtn.addEventListener('click',()=>{
         if(votesData.length===0){ alert("No votes to export."); return; }
         const header=["User ID","Rank 1 (ID)","Rank 2 (ID)","Rank 3 (ID)","Rank 1 (Title)","Rank 2 (Title)","Rank 3 (Title)","Timestamp"];
@@ -282,6 +238,85 @@ function initDashboard(){
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
         alert("Votes exported successfully to CSV.");
     });
+
+    // --- NEW: Function to update videos from links.json and Firebase (now fetching real upvotes) ---
+    async function updateVideosFromJSON() {
+        if(!confirm("Are you sure you want to update the video list? This will sync new videos from links.json to Firebase and fetch current upvotes.")) return;
+
+        try {
+            // 1. Fetch the JSON data from links.json
+            const response = await fetch('links.json');
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const redditUrls = await response.json();
+
+            // 2. Fetch data (Title, Reddit ID, Upvotes) for each URL
+            const videoDataList = [];
+            
+            const promises = redditUrls.map(async (url) => {
+                try {
+                    // Fetch Reddit post data using the URL + .json trick
+                    const r = await fetch(url + ".json");
+                    const j = await r.json();
+                    // Reddit data structure is [ {data: { children: [ {data: post_data} ] } } ]
+                    const data = j[0].data.children[0].data;
+
+                    const title = data.title || "Untitled Post";
+                    const upvotes = data.score || 0; // Use the actual 'score' field for upvotes
+
+                    // Extract the unique Reddit post ID from the URL (e.g., 1ng1q7u)
+                    const match = url.match(/\/comments\/([a-z0-9]+)\//);
+                    const id = match ? match[1] : null;
+                    
+                    if (id) {
+                         videoDataList.push({ 
+                            id: id, 
+                            title: title, 
+                            upvotes: upvotes, 
+                            redditUrl: url 
+                        });
+                    } else {
+                        console.warn(`Could not extract Reddit ID from URL: ${url}. Skipping.`);
+                    }
+
+
+                } catch(err) {
+                    console.error(`Failed to fetch Reddit data for URL: ${url}`, err);
+                }
+            });
+
+            await Promise.allSettled(promises);
+            
+            if (videoDataList.length === 0) {
+                alert("No valid video data was processed from links.json. Check the console for errors.");
+                return;
+            }
+
+            // 3. Prepare Batch Write to Firestore
+            const batch = writeBatch(db);
+            let updateCount = 0;
+
+            videoDataList.forEach(video => {
+                const videoDocRef = doc(db, "videos", video.id); // Use Reddit ID as Document ID
+                
+                // Set the data. Use merge:true to ensure existing vote data is NOT overwritten
+                batch.set(videoDocRef, {
+                    title: video.title,
+                    upvotes: video.upvotes,
+                    redditUrl: video.redditUrl
+                }, { merge: true }); 
+                updateCount++;
+            });
+
+            // 4. Commit the Batch Write
+            await batch.commit();
+
+            alert(`${updateCount} videos have been successfully updated/synced in Firestore with the latest titles and upvote counts.`);
+
+        } catch (e) {
+            console.error("Error updating videos:", e);
+            alert("Failed to update videos. Check console for details.");
+        }
+    }
 }
 </script>
 </body>
