@@ -77,7 +77,6 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
         <h2>Votes Distribution (Rank 1/2/3)</h2>
         <div id="rank1PieChart" style="width: 100%; height: 500px;"></div>
       </div>
-
     </div>
 </div>
 
@@ -121,7 +120,6 @@ let videosData = {};
 let votesData = [];
 let videosLoaded = false;
 let votesLoaded = false;
-const videosCol = collection(db,"videos");
 const votesCol = collection(db,"votes");
 
 function initDashboard(){
@@ -135,16 +133,58 @@ function initDashboard(){
     scoresTabBtn.addEventListener("click",()=>{ scoresTab.classList.add("active"); votesTab.classList.remove("active"); triggerRankingAnimation(); });
     votesTabBtn.addEventListener("click",()=>{ votesTab.classList.add("active"); scoresTab.classList.remove("active"); drawVotesChart(); });
 
-    onSnapshot(videosCol,snapshot=>{
-        videosData={};
-        snapshot.docs.forEach(doc=>{ videosData[doc.id]={...doc.data(), votePoints:0, upvotePoints:0, totalScore:0, rank1Votes:0, rank2Votes:0, rank3Votes:0 }; });
-        videosLoaded=true; if(votesLoaded) calculateScores();
-    });
+    // --- NEW: Load videos from links.json instead of Firestore ---
+    loadVideosFromJson();
 
+    // Votes listener remains
     onSnapshot(votesCol,snapshot=>{
         votesData=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));
         votesLoaded=true; if(videosLoaded) calculateScores(); renderVotes();
     });
+
+    async function loadVideosFromJson() {
+        videosData = {};
+        try {
+            const resp = await fetch("links.json");
+            const links = await resp.json();
+
+            for (const url of links) {
+                const title = await fetchRedditTitle(url);
+                const upvotes = await fetchRedditUpvotes(url);
+
+                const id = url;
+                videosData[id] = {
+                    title,
+                    upvotes,
+                    votePoints:0,
+                    upvotePoints:0,
+                    totalScore:0,
+                    rank1Votes:0,
+                    rank2Votes:0,
+                    rank3Votes:0
+                };
+            }
+            videosLoaded=true; if(votesLoaded) calculateScores();
+        } catch (e) {
+            console.error("Failed to load links.json", e);
+        }
+    }
+
+    async function fetchRedditTitle(url) {
+        try {
+            const resp = await fetch(url + ".json");
+            const json = await resp.json();
+            return json[0].data.children[0].data.title || url;
+        } catch { return url; }
+    }
+
+    async function fetchRedditUpvotes(url) {
+        try {
+            const resp = await fetch(url + ".json");
+            const json = await resp.json();
+            return json[0].data.children[0].data.ups || 0;
+        } catch { return 0; }
+    }
 
     function calculateScores(){
         if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
