@@ -47,8 +47,6 @@ button { margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer; }
           <tr>
             <th>Rank</th>
             <th>Video Title</th>
-            <th>Reddit Upvotes</th>
-            <th>Upvote Points</th>
             <th>Vote Points</th>
             <th>Total Score</th>
           </tr>
@@ -121,8 +119,45 @@ let videosData = {};
 let votesData = [];
 let videosLoaded = false;
 let votesLoaded = false;
-const videosCol = collection(db,"videos");
 const votesCol = collection(db,"votes");
+
+// Load videos from links.json instead of Firestore
+async function loadVideosFromJson(){
+    try {
+        const resp = await fetch("links.json");
+        const links = await resp.json();
+        videosData = {};
+        for (const url of links){
+            const title = await fetchRedditTitle(url);
+            videosData[url] = {
+                id: url,
+                url,
+                title,
+                votePoints: 0,
+                totalScore: 0,
+                rank1Votes:0,
+                rank2Votes:0,
+                rank3Votes:0
+            };
+        }
+        videosLoaded = true;
+        if(votesLoaded) calculateScores();
+    } catch(e){
+        console.error("Failed to load videos from JSON", e);
+    }
+}
+
+// Fetch Reddit post title from .json API
+async function fetchRedditTitle(url){
+    try{
+        const resp = await fetch(url+".json");
+        const json = await resp.json();
+        return json[0].data.children[0].data.title || url;
+    }catch(e){
+        console.error("Failed to fetch title for",url,e);
+        return url;
+    }
+}
 
 function initDashboard(){
     const scoresTabBtn = document.getElementById("scoresTabBtn");
@@ -135,20 +170,20 @@ function initDashboard(){
     scoresTabBtn.addEventListener("click",()=>{ scoresTab.classList.add("active"); votesTab.classList.remove("active"); triggerRankingAnimation(); });
     votesTabBtn.addEventListener("click",()=>{ votesTab.classList.add("active"); scoresTab.classList.remove("active"); drawVotesChart(); });
 
-    onSnapshot(videosCol,snapshot=>{
-        videosData={};
-        snapshot.docs.forEach(doc=>{ videosData[doc.id]={...doc.data(), votePoints:0, upvotePoints:0, totalScore:0, rank1Votes:0, rank2Votes:0, rank3Votes:0 }; });
-        videosLoaded=true; if(votesLoaded) calculateScores();
-    });
-
+    // votes snapshot
     onSnapshot(votesCol,snapshot=>{
         votesData=snapshot.docs.map(doc=>({id:doc.id,...doc.data()}));
-        votesLoaded=true; if(videosLoaded) calculateScores(); renderVotes();
+        votesLoaded=true;
+        if(videosLoaded) calculateScores();
+        renderVotes();
     });
+
+    // Load video list from JSON
+    loadVideosFromJson();
 
     function calculateScores(){
         if(!videosLoaded || !votesLoaded || Object.keys(videosData).length===0) return;
-        Object.values(videosData).forEach(v=>{ v.votePoints=0; v.upvotePoints=0; v.totalScore=0; v.rank1Votes=0; v.rank2Votes=0; v.rank3Votes=0; });
+        Object.values(videosData).forEach(v=>{ v.votePoints=0; v.totalScore=0; v.rank1Votes=0; v.rank2Votes=0; v.rank3Votes=0; });
 
         votesData.forEach(vote=>{
             if(vote.rank1 && videosData[vote.rank1]) videosData[vote.rank1].votePoints+=100, videosData[vote.rank1].rank1Votes+=1;
@@ -156,22 +191,18 @@ function initDashboard(){
             if(vote.rank3 && videosData[vote.rank3]) videosData[vote.rank3].votePoints+=25, videosData[vote.rank3].rank3Votes+=1;
         });
 
-        const sortedByUpvotes=Object.entries(videosData).sort((a,b)=>b[1].upvotes-a[1].upvotes);
-        const step=10; sortedByUpvotes.forEach(([id,v],i)=>{ videosData[id].upvotePoints=step*(sortedByUpvotes.length-i); });
-
-        Object.values(videosData).forEach(v=>v.totalScore=v.votePoints+v.upvotePoints);
+        Object.values(videosData).forEach(v=>v.totalScore=v.votePoints);
         renderRanking(); drawVotesChart();
     }
 
     function renderRanking(){
         const tbody=document.querySelector("#rankingTable tbody");
-        const existingRows=Array.from(tbody.querySelectorAll('tr')).reduce((acc,tr)=>{ acc[tr.dataset.videoId]=tr; return acc; },{});
         tbody.innerHTML="";
         const sorted=Object.entries(videosData).sort((a,b)=>b[1].totalScore-a[1].totalScore);
         sorted.forEach(([id,v],i)=>{
-            let tr=existingRows[id]||document.createElement("tr");
+            const tr=document.createElement("tr");
             tr.dataset.videoId=id;
-            tr.innerHTML=`<td>${i+1}</td><td>${v.title}</td><td>${v.upvotes||0}</td><td>${v.upvotePoints||0}</td><td>${v.votePoints||0}</td><td>${v.totalScore||0}</td>`;
+            tr.innerHTML=`<td>${i+1}</td><td>${v.title}</td><td>${v.votePoints||0}</td><td>${v.totalScore||0}</td>`;
             tr.classList.remove("top1","top2","top3");
             if(i===0) tr.classList.add("top1"); else if(i===1) tr.classList.add("top2"); else if(i===2) tr.classList.add("top3");
             tbody.appendChild(tr);
@@ -185,7 +216,11 @@ function initDashboard(){
         votesData.slice().sort((a,b)=>(b.timestamp?.seconds||0)-(a.timestamp?.seconds||0)).forEach(v=>{
             const tr=document.createElement("tr");
             const ts=v.timestamp?.seconds?new Date(v.timestamp.seconds*1000).toLocaleString():"";
-            tr.innerHTML=`<td>${v.userId||""}</td><td>${v.rank1?videosData[v.rank1]?.title||v.rank1:""}</td><td>${v.rank2?videosData[v.rank2]?.title||v.rank2:""}</td><td>${v.rank3?videosData[v.rank3]?.title||v.rank3:""}</td><td>${ts}</td>`;
+            tr.innerHTML=`<td>${v.userId||""}</td>
+                          <td>${v.rank1?videosData[v.rank1]?.title||v.rank1:""}</td>
+                          <td>${v.rank2?videosData[v.rank2]?.title||v.rank2:""}</td>
+                          <td>${v.rank3?videosData[v.rank3]?.title||v.rank3:""}</td>
+                          <td>${ts}</td>`;
             tbody.appendChild(tr);
         });
     }
