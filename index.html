@@ -86,12 +86,21 @@ async function loadPosts() {
     const res = await fetch("https://raw.githubusercontent.com/vpsj/rotm_test/main/links.json");
     const urls = await res.json();
 
-    const promises = urls.map(async (url, i) => {
-      const videoId = "video"+(i+1);
+    const promises = urls.map(async (url) => {
+      // *** FIX: Extract the unique Reddit ID directly from the URL ***
+      const match = url.match(/\/comments\/([a-z0-9]+)\//);
+      const redditPostId = match ? match[1] : null;
+
       const card = document.createElement("div");
       card.className = "video-card";
       card.innerHTML = `<p>Loading video...</p>`; // Placeholder
       videoGrid.appendChild(card);
+
+      if (!redditPostId) {
+        console.error("Could not extract Reddit ID from URL:", url);
+        card.innerHTML = `<p>Error: Invalid Reddit URL.</p><a href="${url}" target="_blank">View on Reddit</a>`;
+        return; // Skip this invalid URL
+      }
 
       try {
         const r = await fetch(url + ".json");
@@ -99,8 +108,6 @@ async function loadPosts() {
         const data = j[0].data.children[0].data;
         const title = data.title || url;
         
-        // --- CHANGED: Video Loading Logic ---
-        // Check if the post has a direct Reddit video
         if (data?.secure_media?.reddit_video) {
           const videoUrl = data.secure_media.reddit_video.fallback_url;
           card.innerHTML = `
@@ -111,7 +118,6 @@ async function loadPosts() {
             </div>
           `;
         } else {
-          // Fallback for non-video posts (e.g., YouTube links)
           card.innerHTML = `
             <h3>${title}</h3>
             <p>Could not load video directly.</p>
@@ -121,7 +127,8 @@ async function loadPosts() {
 
         const li = document.createElement("li");
         li.textContent = title;
-        li.dataset.id = videoId;
+        // *** FIX: Use the extracted Reddit ID as the dataset ID ***
+        li.dataset.id = redditPostId;
         rankingList.appendChild(li);
 
       } catch(err) {
@@ -130,7 +137,7 @@ async function loadPosts() {
         // Also add a draggable item for this failed post
         const li = document.createElement("li");
         li.textContent = `Failed to load: ${url}`;
-        li.dataset.id = videoId;
+        li.dataset.id = redditPostId; // Still use the ID so it can be identified
         rankingList.appendChild(li);
       }
     });
