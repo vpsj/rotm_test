@@ -4,23 +4,23 @@
 <meta charset="UTF-8" />
 <title>Vote for Your Top 3 Favorite Videos</title>
 <style>
-  body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
-  h1,h2,p { text-align:center; }
-  .video-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px,1fr)); gap:20px; margin-bottom:40px; }
-  .video-card { background:#222; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; justify-content: space-between; }
-  .video-card h3 { margin: 0 0 10px 0; font-size: 16px; min-height: 40px; } /* Style for title */
-  .video-card a { color: #d1a3ff; } /* Style for link */
-  .video-card video { width: 100%; border-radius: 4px; } /* Style for video element */
-  #rankingSection { background:#222; padding:20px; border-radius:10px; }
-  #rankingList { list-style:none; padding:0; margin-top:20px; }
-  #rankingList li { padding:10px 15px; margin:10px 0; background:#333; border:1px solid #555; border-radius:5px; cursor:grab; transition:background 0.3s; }
-  #rankingList li.top1 { background:#d4af37; color:#111; font-weight:bold; }
-  #rankingList li.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
-  #rankingList li.top3 { background:#cd7f32; color:#111; font-weight:bold; }
-  #submitBtn { margin-top:20px; padding:10px 20px; font-size:16px; display:block; margin:auto; cursor:pointer; }
-  #responseMsg { text-align:center; font-weight:bold; margin-top:20px; }
-  .judge-criteria { max-width:600px; margin:auto; }
-  .judge-criteria ul { padding-left:100px; text-align:left; list-style-position:inside; }
+  body { font-family: Arial; background:#111; color:#fff; padding:20px; max-width:1200px; margin:auto; }
+  h1,h2,p { text-align:center; }
+  .video-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(360px,1fr)); gap:20px; margin-bottom:40px; }
+  .video-card { background:#222; border-radius:8px; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.3); display: flex; flex-direction: column; justify-content: space-between; }
+  .video-card h3 { margin: 0 0 10px 0; font-size: 16px; min-height: 40px; } /* Style for title */
+  .video-card a { color: #d1a3ff; } /* Style for link */
+  .video-card video { width: 100%; border-radius: 4px; } /* Style for video element */
+  #rankingSection { background:#222; padding:20px; border-radius:10px; }
+  #rankingList { list-style:none; padding:0; margin-top:20px; }
+  #rankingList li { padding:10px 15px; margin:10px 0; background:#333; border:1px solid #555; border-radius:5px; cursor:grab; transition:background 0.3s; }
+  #rankingList li.top1 { background:#d4af37; color:#111; font-weight:bold; }
+  #rankingList li.top2 { background:#c0c0c0; color:#111; font-weight:bold; }
+  #rankingList li.top3 { background:#cd7f32; color:#111; font-weight:bold; }
+  #submitBtn { margin-top:20px; padding:10px 20px; font-size:16px; display:block; margin:auto; cursor:pointer; }
+  #responseMsg { text-align:center; font-weight:bold; margin-top:20px; }
+  .judge-criteria { max-width:600px; margin:auto; }
+  .judge-criteria ul { padding-left:100px; text-align:left; list-style-position:inside; }
 </style>
 </head>
 <body>
@@ -30,26 +30,26 @@
 
 <h2>Judge the videos based on the following criteria:</h2>
 <div class="judge-criteria">
-  <ul>
-    <li>The video quality and cinematography of the clip</li>
-    <li>Authentic track sound over low-effort background music</li>
-    <li>Title of the video, how descriptive and informative it is</li>
-  </ul>
+  <ul>
+    <li>The video quality and cinematography of the clip</li>
+    <li>Authentic track sound over low-effort background music</li>
+    <li>Title of the video, how descriptive and informative it is</li>
+  </ul>
 </div>
 
 <div class="video-grid" id="videoGrid"></div>
 
 <div id="rankingSection">
-  <h2>Drag to Rank Top 3</h2>
-  <ul id="rankingList"></ul>
-  <button id="submitBtn">Submit Vote</button>
-  <p id="responseMsg"></p>
+  <h2>Drag to Rank Top 3</h2>
+  <ul id="rankingList"></ul>
+  <button id="submitBtn">Submit Vote</button>
+  <p id="responseMsg"></p>
 </div>
 
 <form id="hiddenGoogleForm" action="https://docs.google.com/forms/d/1wUIPXtUV5HqQtNMwfj5D4Kk0MGMsQRMvOnWLfOD8aIA/formResponse" method="POST" target="hiddenIframe" style="display:none;">
-  <input type="text" name="entry.840683232" id="field1" /> 
-  <input type="text" name="entry.1808098160" id="field2" /> 
-  <input type="text" name="entry.1134855181" id="field3" /> 
+  <input type="text" name="entry.840683232" id="field1" /> 
+  <input type="text" name="entry.1808098160" id="field2" /> 
+  <input type="text" name="entry.1134855181" id="field3" /> 
 </form>
 <iframe name="hiddenIframe" style="display:none;"></iframe>
 
@@ -59,9 +59,9 @@ import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.g
 import Sortable from "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/modular/sortable.esm.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
-  authDomain: "rotm-2a088.firebaseapp.com",
-  projectId: "rotm-2a088",
+  apiKey: "AIzaSyDChk83uv5LqXHemAziEHO3YAqEROHjIbo",
+  authDomain: "rotm-2a088.firebaseapp.com",
+  projectId: "rotm-2a088",
 };
 
 const app = initializeApp(firebaseConfig);
@@ -71,104 +71,115 @@ const videoGrid = document.getElementById("videoGrid");
 const rankingList = document.getElementById("rankingList");
 
 function updateTop3Styling() {
-  [...rankingList.children].forEach((li, i) => {
-    li.classList.remove("top1","top2","top3");
-    const text = li.textContent.replace(/^\d+\.\s*/, "");
-    if(i===0){ li.classList.add("top1"); li.textContent=`1. ${text}`; }
-    else if(i===1){ li.classList.add("top2"); li.textContent=`2. ${text}`; }
-    else if(i===2){ li.classList.add("top3"); li.textContent=`3. ${text}`; }
-    else li.textContent=text;
-  });
+  [...rankingList.children].forEach((li, i) => {
+    li.classList.remove("top1","top2","top3");
+    // Remove existing rank number (e.g., "1. ")
+    const text = li.textContent.replace(/^\d+\.\s*/, "");
+    if(i===0){ li.classList.add("top1"); li.textContent=`1. ${text}`; }
+    else if(i===1){ li.classList.add("top2"); li.textContent=`2. ${text}`; }
+    else if(i===2){ li.classList.add("top3"); li.textContent=`3. ${text}`; }
+    else li.textContent=text;
+  });
 }
 
 async function loadPosts() {
-  try {
-    const res = await fetch("https://raw.githubusercontent.com/vpsj/rotm_test/main/links.json");
-    const urls = await res.json();
+  try {
+    const res = await fetch("https://raw.githubusercontent.com/vpsj/rotm_test/main/links.json");
+    const urls = await res.json();
 
-    const promises = urls.map(async (url, i) => {
-      const videoId = "video"+(i+1);
-      const card = document.createElement("div");
-      card.className = "video-card";
-      card.innerHTML = `<p>Loading video...</p>`; // Placeholder
-      videoGrid.appendChild(card);
+    const promises = urls.map(async (url) => {
+        // --- NEW: Extract the Reddit Post ID to use as a unique identifier ---
+        const match = url.match(/\/comments\/([a-z0-9]+)\//);
+        const redditPostId = match ? match[1] : null;
 
-      try {
-        const r = await fetch(url + ".json");
-        const j = await r.json();
-        const data = j[0].data.children[0].data;
-        const title = data.title || url;
-        
-        // --- CHANGED: Video Loading Logic ---
-        // Check if the post has a direct Reddit video
-        if (data?.secure_media?.reddit_video) {
-          const videoUrl = data.secure_media.reddit_video.fallback_url;
-          card.innerHTML = `
-            <h3>${title}</h3>
-            <div>
-                <video src="${videoUrl}" autoplay muted loop playsinline width="100%"></video>
-                <a href="${url}" target="_blank">View on Reddit</a>
-            </div>
-          `;
-        } else {
-          // Fallback for non-video posts (e.g., YouTube links)
-          card.innerHTML = `
-            <h3>${title}</h3>
-            <p>Could not load video directly.</p>
-            <a href="${url}" target="_blank">View Content on Reddit</a>
-          `;
+        if (!redditPostId) {
+            console.warn(`Skipping URL: Could not extract Reddit ID from ${url}`);
+            return; // Skip this post if ID can't be found
         }
+        // ----------------------------------------------------------------------
+        
+        const card = document.createElement("div");
+        card.className = "video-card";
+        card.innerHTML = `<p>Loading video...</p>`; // Placeholder
+        videoGrid.appendChild(card);
 
-        const li = document.createElement("li");
-        li.textContent = title;
-        li.dataset.id = videoId;
-        rankingList.appendChild(li);
+        try {
+            const r = await fetch(url + ".json");
+            const j = await r.json();
+            const data = j[0].data.children[0].data;
+            const title = data.title || url;
+            
+            // --- Video Loading Logic ---
+            if (data?.secure_media?.reddit_video) {
+                const videoUrl = data.secure_media.reddit_video.fallback_url;
+                card.innerHTML = `
+                    <h3>${title}</h3>
+                    <div>
+                        <video src="${videoUrl}" autoplay muted loop playsinline width="100%"></video>
+                        <a href="${url}" target="_blank">View on Reddit</a>
+                    </div>
+                  `;
+            } else {
+                // Fallback for non-video posts (e.g., YouTube links)
+                card.innerHTML = `
+                    <h3>${title}</h3>
+                    <p>Could not load video directly.</p>
+                    <a href="${url}" target="_blank">View Content on Reddit</a>
+                  `;
+            }
 
-      } catch(err) {
-        console.error("Failed Reddit fetch for URL:", url, err);
-        card.innerHTML = `<p>Error loading content.</p><a href="${url}" target="_blank">View on Reddit</a>`;
-        // Also add a draggable item for this failed post
-        const li = document.createElement("li");
-        li.textContent = `Failed to load: ${url}`;
-        li.dataset.id = videoId;
-        rankingList.appendChild(li);
-      }
-    });
+            const li = document.createElement("li");
+            li.textContent = title;
+            // CRITICAL FIX: Use Reddit Post ID for dataset.id
+            li.dataset.id = redditPostId;
+            rankingList.appendChild(li);
 
-    await Promise.allSettled(promises);
+        } catch(err) {
+            console.error("Failed Reddit fetch for URL:", url, err);
+            card.innerHTML = `<p>Error loading content.</p><a href="${url}" target="_blank">View on Reddit</a>`;
+            // Also add a draggable item for this failed post, using the correct ID
+            const li = document.createElement("li");
+            li.textContent = `Failed to load: ${url}`;
+            li.dataset.id = redditPostId; 
+            rankingList.appendChild(li);
+        }
+    });
 
-    Sortable.create(rankingList, { animation:150, onEnd:updateTop3Styling });
-    updateTop3Styling();
-  } catch(err) {
-    console.error("Failed to load the list of posts:", err);
-    videoGrid.innerHTML = `<p>Could not load video list. Please try again later.</p>`;
-  }
+    await Promise.allSettled(promises);
+
+    Sortable.create(rankingList, { animation:150, onEnd:updateTop3Styling });
+    updateTop3Styling();
+  } catch(err) {
+    console.error("Failed to load the list of posts:", err);
+    videoGrid.innerHTML = `<p>Could not load video list. Please try again later.</p>`;
+  }
 }
 
 document.getElementById("submitBtn").addEventListener("click", async () => {
-  const top3Ids = [...rankingList.children].slice(0,3).map(li => li.dataset.id);
-  
-  if (top3Ids.length < 3) {
-      document.getElementById("responseMsg").innerText = "Please rank your top 3 videos before submitting.";
-      return;
-  }
+  const top3Ids = [...rankingList.children].slice(0,3).map(li => li.dataset.id);
+  
+  if (top3Ids.length < 3) {
+      document.getElementById("responseMsg").innerText = "Please rank your top 3 videos before submitting.";
+      return;
+  }
 
-  await addDoc(collection(db, "votes"), {
-    userId: "anon_" + Math.floor(Math.random()*10000),
-    rank1: top3Ids[0]||null,
-    rank2: top3Ids[1]||null,
-    rank3: top3Ids[2]||null,
-    timestamp: serverTimestamp()
-  });
+  // CRITICAL: Use the actual Reddit Post IDs in the vote document
+  await addDoc(collection(db, "votes"), {
+    userId: "anon_" + Math.floor(Math.random()*10000),
+    rank1: top3Ids[0]||null,
+    rank2: top3Ids[1]||null,
+    rank3: top3Ids[2]||null,
+    timestamp: serverTimestamp()
+  });
 
-  const top3Titles = [...rankingList.children].slice(0,3).map(li => li.textContent.replace(/^\d+\.\s*/, ""));
-  document.getElementById("field1").value = top3Titles[0]||"";
-  document.getElementById("field2").value = top3Titles[1]||"";
-  document.getElementById("field3").value = top3Titles[2]||"";
-  document.getElementById("hiddenGoogleForm").submit();
+  const top3Titles = [...rankingList.children].slice(0,3).map(li => li.textContent.replace(/^\d+\.\s*/, ""));
+  document.getElementById("field1").value = top3Titles[0]||"";
+  document.getElementById("field2").value = top3Titles[1]||"";
+  document.getElementById("field3").value = top3Titles[2]||"";
+  document.getElementById("hiddenGoogleForm").submit();
 
-  document.getElementById("responseMsg").innerText = "Your vote has been submitted. Thank you!";
-  document.getElementById("submitBtn").disabled = true;
+  document.getElementById("responseMsg").innerText = "Your vote has been submitted. Thank you!";
+  document.getElementById("submitBtn").disabled = true;
 });
 
 loadPosts();
